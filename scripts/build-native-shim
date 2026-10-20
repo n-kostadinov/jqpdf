@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# Compiles the jqpdf JNI shim (src/native/jni/jqpdf_jni.c) for every target
+# whose toolchain is reachable, placing the results into the native resource
+# directories (default) or an explicit --out directory.
+#
+# Targets on this developer machine:
+#   windows-x86_64  jqpdfjni.dll   cross-compiled with x86_64-w64-mingw32-gcc
+#   linux-x86_64    libjqpdfjni.so compiled with the native gcc
+# Both are reached through WSL when the script runs on Windows, and natively
+# when it runs inside WSL or on a Linux runner. A macOS branch exists for the
+# future GitHub workflow runners.
+#
+# A missing toolchain or missing qpdf staging only produces a warning so the
+# overall build still succeeds with whatever platforms are available; a real
+# compile error fails the script. Prerequisites: scripts/fetch-qpdf-binaries
+# must have staged headers and link libraries under build/native/.
+set -uo pipefail
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo_root"
+
+src="src/native/jni/jqpdf_jni.c"
+staging="build/native"
+out="src/main/resources/dev/machineminds/jqpdf/native"
+jdk_win_home=""
+inner=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        # "classes" avoids passing Windows paths through the Maven -> WSL
+        # bash chain, which strips their backslashes.
+        --out)
+            case "$2" in
+                classes) out="$repo_root/target/classes/dev/machineminds/jqpdf/native" ;;
+                *) out=$2 ;;
+            esac
+            shift 2
+            ;;
+        --inner) inner=1; shift ;;
+        --jdk-win-home) jdk_win_home=$2; shift 2 ;;
+        *) echo "error: unknown argument $1" >&2; exit 2 ;;
+    esac
+done
+
+warn() { echo "[build-native-shim] WARNING: $*" >&2; }
+info() { echo "[build-native-shim] $*"; }
+
+# Home of a Windows JDK (mixed-style path like C:/...) that ships the win32
+# JNI headers; used for the mingw cross build. Tries JAVA_HOME first, then
+# the java executable on PATH (Maven-launched shells do not always export a
+# usable JAVA_HOME).
+windows_jdk_home() {
+    if [ -n "${JAVA_HOME:-}" ] && [ -f "$JAVA_HOME/include/win32/jni_md.h" ]; then
+        cygpath -m "$JAVA_HOME" 2>/dev/null || echo "$JAVA_HOME"
+        return 0
+    fi
+    local java_bin
+    java_bin=$(command -v java 2>/dev/null || true)
+    if [ -n "$java_bin" ]; then
+        local home
+        home=$(dirname "$(dirname "$(cygpath -m "$java_bin" 2>/dev/null || echo "$java_bin")")")
+        if [ -f "$home/include/win32/jni_md.h" ]; then
+            echo "$home"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+require_staging() {
+    if [ ! -f "$staging/include/qpdf/qpdfjob-c.h" ]; then
+        warn "qpdf headers not staged under $staging; run scripts/fetch-qpdf-binaries first"
+        return 1
+    fi
+}
+
+show_out() {
+    info "output directory: $out"
+}
+
+# Locates a JDK whose include/ directory provides jni.h for the given
+# platform subdirectory (linux, win32, darwin). Cross builds use the target
+# platform's JDK via jdk_win_home (a WSL path to a Windows JDK).
+jdk_include() {
+    local platform_subdir=$1 jdk_home java_bin
+    java_bin=$(command -v java 2>/dev/null || true)
+    [ -n "$java_bin" ] && java_bin=$(readlink -f "$java_bin")
+    for jdk_home in "${JAVA_HOME:-}" "$(dirname "$(dirname "$java_bin")")" "$jdk_win_home"; do
+        if [ -n "$jdk_home" ] && [ -f "$jdk_home/include/jni.h" ] && [ -f "$jdk_home/include/$platform_subdir/jni_md.h" ]; then
+            echo "$jdk_home/include"
+            return 0
+        fi
+    done
+    warn "no JDK include directory with $platform_subdir/jni_md.h found (need JDK headers)"
+    return 1
+}
+
+build_linux_x86_64() {
+    command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || { warn "no native C compiler for linux-x86_64"; return 0; }
+    require_staging || return 0
+    local jdk_inc
+    jdk_inc=$(jdk_include linux) || return 0
+    local cc_bin
+    cc_bin=$(command -v cc || command -v gcc)
+    mkdir -p "$out/linux-x86_64"
+    info "compiling linux-x86_64/libjqpdfjni.so"
+    "$cc_bin" -shared -fPIC -O2 -std=c11 \
+        -I"$jdk_inc" -I"$jdk_inc/linux" -I"$staging/include" \
+        "$src" \
+        -L"$staging/linux-x86_64" -l:libqpdf.so.30 \
+        -Wl,-rpath,'$ORIGIN' \
+        -o "$out/linux-x86_64/libjqpdfjni.so" || return 1
+}
+
+build_windows_x86_64() {
+    local cross=x86_64-w64-mingw32-gcc
+    command -v "$cross" >/dev/null 2>&1 || { warn "no $cross for windows-x86_64"; return 0; }
+    require_staging || return 0
+    local jdk_inc
+    jdk_inc=$(jdk_include win32) || return 0
+    mkdir -p "$out/windows-x86_64"
+    info "compiling windows-x86_64/jqpdfjni.dll"
+    if ! "$cross" -shared -O2 -std=c11 -static -static-libgcc \
+            -I"$jdk_inc" -I"$jdk_inc/win32" -I"$staging/include" \
+            "$src" \
+            -L"$staging/windows-x86_64" -lqpdf \
+            -o "$out/windows-x86_64/jqpdfjni.dll"; then
+        warn "linking against qpdf.lib failed; retrying directly against qpdf30.dll"
+        "$cross" -shared -O2 -std=c11 -static -static-libgcc \
+            -I"$jdk_inc" -I"$jdk_inc/win32" -I"$staging/include" \
+            "$src" \
+            -L"src/main/resources/dev/machineminds/jqpdf/native/windows-x86_64" -l:qpdf30.dll \
+            -o "$out/windows-x86_64/jqpdfjni.dll" || return 1
+    fi
+}
+
+build_macos() {
+    local arch=$1
+    command -v clang >/dev/null 2>&1 || { warn "no clang for macos-$arch"; return 0; }
+    require_staging || return 0
+    local jdk_inc
+    jdk_inc=$(jdk_include darwin) || return 0
+    mkdir -p "$out/macos-$arch"
+    info "compiling macos-$arch/libjqpdfjni.dylib"
+    clang -shared -O2 -std=c11 \
+        -I"$jdk_inc" -I"$jdk_inc/darwin" -I"$staging/include" \
+        "$src" \
+        -L"$staging/macos-x86_64" -l:libqpdf.30.dylib \
+        -o "$out/macos-$arch/libjqpdfjni.dylib" || return 1
+}
+
+os=$(uname -s)
+case "$os" in
+    Linux*)
+        # When a Windows-side Maven resolves "bash" to WSL's System32 bash,
+        # this script runs inside WSL: JAVA_HOME and --out then arrive in
+        # Windows form (C:/...). Translate both; the Windows JDK provides the
+        # win32 JNI headers for the mingw cross build, which Linux JDKs lack.
+        case "${JAVA_HOME:-}" in
+            [A-Za-z]:[\\/]*) jdk_win_home=$(wslpath -u "$JAVA_HOME") ;;
+        esac
+        case "$out" in
+            [A-Za-z]:[\\/]*) out=$(wslpath -u "$out") ;;
+        esac
+        show_out
+        # Native Linux run: build the .so here and the .dll if the mingw
+        # cross-compiler is installed.
+        rc=0
+        build_linux_x86_64 || rc=1
+        build_windows_x86_64 || rc=1
+        exit $rc
+        ;;
+    Darwin*)
+        rc=0
+        build_macos x86_64 || rc=1
+        build_macos aarch64 || rc=1
+        exit $rc
+        ;;
+    MINGW*|MSYS*|CYGWIN*|Windows*)
+        # Windows run: delegate both compilations to WSL, which has gcc and
+        # the mingw cross-compiler.
+        if ! command -v wsl.exe >/dev/null 2>&1; then
+            warn "wsl.exe not found; skipping JNI shim compilation"
+            exit 0
+        fi
+        win_root=$(pwd -W 2>/dev/null || pwd)
+        wsl_root=$(wsl.exe wslpath -u "$win_root" | tr -d '\r\n')
+        if [ -z "$wsl_root" ]; then
+            warn "could not translate $win_root into WSL; skipping JNI shim compilation"
+            exit 0
+        fi
+        win_out=$(cd "$out" 2>/dev/null && pwd -W 2>/dev/null)
+        if [ -z "$win_out" ]; then
+            mkdir -p "$out"
+            win_out=$(cd "$out" && pwd -W)
+        fi
+        wsl_out=$(wsl.exe wslpath -u "$win_out" | tr -d '\r\n')
+        # The Windows JDK provides the win32 JNI headers for the cross build;
+        # Linux JDKs ship only their own platform's jni_md.h.
+        wsl_jdk_win=""
+        win_jdk_home=$(windows_jdk_home)
+        if [ -n "$win_jdk_home" ]; then
+            wsl_jdk_win=$(wsl.exe wslpath -u "$win_jdk_home" | tr -d '\r\n')
+        fi
+        inner_cmd="cd '$wsl_root' && ./scripts/build-native-shim --inner --out '$wsl_out'"
+        if [ -n "$wsl_jdk_win" ]; then
+            info "using Windows JDK at $wsl_jdk_win for the cross build"
+            inner_cmd="$inner_cmd --jdk-win-home '$wsl_jdk_win'"
+        else
+            warn "no Windows JDK found (tried \$JAVA_HOME=$JAVA_HOME and java on PATH); skipping windows-x86_64 shim"
+        fi
+        exec wsl.exe -- bash -c "$inner_cmd"
+        ;;
+    *)
+        warn "unsupported OS $os; skipping JNI shim compilation"
+        exit 0
+        ;;
+esac

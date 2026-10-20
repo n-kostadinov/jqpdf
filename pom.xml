@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.machineminds</groupId>
+  <artifactId>jqpdf</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>jqpdf</name>
+  <description>JNI wrapper around the qpdf PDF toolkit</description>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+    <!-- qpdf release whose binaries are bundled and compiled against; keep in
+         sync with scripts/fetch-qpdf-binaries and scripts/build-native-shim. -->
+    <qpdf.version>12.4.2</qpdf.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.11.4</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <!-- Native binaries under dev/machineminds/jqpdf/native must be copied
+           verbatim; only version.properties is Maven-filtered. -->
+      <resource>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>dev/machineminds/jqpdf/version.properties</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>dev/machineminds/jqpdf/version.properties</include>
+        </includes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>build-native-shim</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <!-- Environment-detecting: compiles every shim whose
+                     toolchain is reachable and warns otherwise. -->
+                <exec executable="bash" dir="${project.basedir}" failonerror="true">
+                  <!-- Let JAVA_HOME cross into WSL when "bash" resolves to the
+                       System32 WSL bash (translated to a WSL path by /p).
+                       "classes" tells the script to write the shims into
+                       target/classes; Windows paths would lose their
+                       backslashes across the WSL argument chain. -->
+                  <env key="WSLENV" value="JAVA_HOME/p"/>
+                  <arg value="scripts/build-native-shim"/>
+                  <arg value="--out"/>
+                  <arg value="classes"/>
+                </exec>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
