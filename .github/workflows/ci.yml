@@ -1,0 +1,141 @@
+# Builds the native stack (qpdf binaries + JNI shims) in the cloud and runs
+# the test suite against real JNI on every supported desktop OS. Also the
+# build/test stage of the release workflow (workflow_call).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # scripts/fetch-qpdf-binaries drives `gh release download` against the
+  # public qpdf/qpdf repo; any authenticated token works.
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  # Linux runner: native .so plus the Windows .dll cross-compiled with
+  # mingw. The mingw build needs win32 JNI headers, which only a Windows
+  # JDK ships, so a Temurin Windows JDK archive supplies include/win32.
+  natives-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Install native toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc mingw-w64
+      - name: Fetch qpdf binaries
+        run: scripts/fetch-qpdf-binaries
+      - name: Extract Windows JDK JNI headers
+        run: |
+          curl -sSfL -o /tmp/windjdk.zip \
+            "https://api.adoptium.net/v3/binary/latest/25/ga/windows/x64/jdk/hotspot/normal/eclipse"
+          mkdir -p build/windows-jdk
+          unzip -q /tmp/windjdk.zip 'jdk-*/include/*' -d build/windows-jdk
+          jdk_home=$(dirname "$(dirname "$(find build/windows-jdk -name jni.h)")")
+          echo "WINDOWS_JDK_HOME=$jdk_home" >> "$GITHUB_ENV"
+      - name: Build JNI shims
+        run: scripts/build-native-shim --jdk-win-home "$WINDOWS_JDK_HOME"
+      - name: Upload natives
+        uses: actions/upload-artifact@v7
+        with:
+          name: natives-ubuntu
+          path: |
+            src/main/resources/dev/machineminds/jqpdf/native/linux-x86_64
+            src/main/resources/dev/machineminds/jqpdf/native/windows-x86_64
+
+  # arm64 macOS runner: builds both dylibs; the x86_64 one is cross-compiled
+  # (Intel runners no longer exist) and statically validated below.
+  natives-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Fetch qpdf binaries
+        run: scripts/fetch-qpdf-binaries
+      - name: Build JNI shims
+        run: scripts/build-native-shim
+      - name: Validate shim architectures
+        run: |
+          native=src/main/resources/dev/machineminds/jqpdf/native
+          check_arch() {
+            file "$1" | grep -q "$2" || { echo "error: $1 is not $2: $(file "$1")" >&2; exit 1; }
+          }
+          check_arch "$native/macos-aarch64/libjqpdfjni.dylib" arm64
+          check_arch "$native/macos-x86_64/libjqpdfjni.dylib" x86_64
+          check_arch build/native/macos-x86_64/libqpdf.30.dylib x86_64
+          file "$native"/macos-*/libjqpdfjni.dylib
+      - name: Upload natives
+        uses: actions/upload-artifact@v7
+        with:
+          name: natives-macos
+          path: |
+            src/main/resources/dev/machineminds/jqpdf/native/macos-x86_64
+            src/main/resources/dev/machineminds/jqpdf/native/macos-aarch64
+
+  test:
+    needs: [natives-ubuntu, natives-macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # The native tests read fixture PDFs from the qpdf checkout that sits
+      # next to the repo on dev machines; checkout cannot place it outside
+      # the workspace, so Fixtures.QPDF_CHECKOUT is pointed here instead.
+      - name: Check out qpdf test fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: qpdf/qpdf
+          ref: v12.4.2 # keep in sync with <qpdf.version> in pom.xml
+          path: qpdf-checkout
+          fetch-depth: 1
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: Stage prebuilt natives
+        uses: actions/download-artifact@v8
+        with:
+          name: natives-ubuntu
+          path: src/main/resources/dev/machineminds/jqpdf/native
+      - uses: actions/download-artifact@v8
+        with:
+          name: natives-macos
+          path: src/main/resources/dev/machineminds/jqpdf/native
+      - name: Run tests
+        # bash on every OS: pwsh mangles -D properties for mvn.cmd
+        shell: bash
+        env:
+          QPDF_CHECKOUT: ${{ github.workspace }}/qpdf-checkout
+        run: mvn -B -Dexec.skip=true test
+      - name: Fail on skipped native tests
+        if: always()
+        shell: bash
+        run: |
+          # A platform with missing natives skips its tests via assumption;
+          # a green build that silently skipped them hides a broken bundle.
+          if grep -q "Skipped: [1-9]" target/surefire-reports/*.txt; then
+            echo "error: some tests were skipped; native stack incomplete" >&2
+            exit 1
+          fi
+          echo "all tests executed: $(grep -h "Tests run:" target/surefire-reports/*.txt | tail -1)"

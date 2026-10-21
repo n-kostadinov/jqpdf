@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Downloads the pinned qpdf release binaries (via gh CLI) and stages them for
+# jqpdf:
+#   * runtime libraries  -> src/main/resources/dev/machineminds/jqpdf/native/<os>-<arch>/
+#   * headers + link libs -> build/native/ (consumed by scripts/build-native-shim)
+#
+# Run from the repository root on a machine with gh installed (Windows Git
+# Bash). Re-running is safe: downloads are cached in build/downloads and every
+# artifact is re-verified against the release's published .sha256 before
+# staging. A checksum mismatch aborts the run.
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$repo_root"
+
+qpdf_version=$(sed -n 's/.*<qpdf.version>\(.*\)<\/qpdf.version>.*/\1/p' pom.xml)
+if [ -z "$qpdf_version" ]; then
+    echo "error: <qpdf.version> not found in pom.xml" >&2
+    exit 1
+fi
+
+downloads="build/downloads"
+staging="build/native"
+native_res="src/main/resources/dev/machineminds/jqpdf/native"
+mkdir -p "$downloads" "$staging"
+
+# Asset name per bundled platform directory. A case lookup instead of an
+# associative array: macOS still ships bash 3.2 as /bin/bash.
+platform_asset() {
+    case $1 in
+        windows-x86_64)  echo "qpdf-${qpdf_version}-msvc64.zip" ;;
+        windows-x86)     echo "qpdf-${qpdf_version}-msvc32.zip" ;;
+        windows-aarch64) echo "qpdf-${qpdf_version}-msvc-arm64.zip" ;;
+        linux-x86_64)    echo "qpdf-${qpdf_version}-bin-linux-x86_64.zip" ;;
+        linux-aarch64)   echo "qpdf-${qpdf_version}-bin-linux-aarch64.zip" ;;
+        macos-x86_64)    echo "qpdf-${qpdf_version}-bin-macos-x86_64.zip" ;;
+        macos-aarch64)   echo "qpdf-${qpdf_version}-bin-macos-arm64.zip" ;;
+    esac
+}
+
+bundled_platforms="windows-x86_64 windows-x86 windows-aarch64 linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64"
+
+echo "==> qpdf ${qpdf_version}: downloading release assets (cached in ${downloads})"
+patterns=(--pattern "qpdf-${qpdf_version}.sha256")
+for platform in $bundled_platforms; do
+    patterns+=(--pattern "$(platform_asset "$platform")")
+done
+gh release download "v${qpdf_version}" \
+    --repo qpdf/qpdf \
+    --dir "$downloads" \
+    --clobber \
+    "${patterns[@]}"
+
+# The gh --pattern list above is built explicitly to keep this script working
+# on older gh versions; verify all expected assets are present.
+checksums="$downloads/qpdf-${qpdf_version}.sha256"
+# Portable helpers: Linux runners/images have GNU coreutils, macOS has BSD
+# (shasum ships with its perl; BSD stat uses -f for the size format).
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+file_size() {
+    stat -c%s "$1" 2>/dev/null || stat -f%z "$1"
+}
+
+verify_asset() {
+    local asset=$1
+    local expected
+    expected=$(grep " ${asset}\$" "$checksums" | awk '{print $1}')
+    if [ -z "$expected" ]; then
+        echo "error: no published checksum for ${asset}" >&2
+        exit 1
+    fi
+    local actual
+    actual=$(sha256_of "$downloads/$asset")
+    if [ "$expected" != "$actual" ]; then
+        echo "error: checksum mismatch for ${asset}: expected ${expected}, got ${actual}" >&2
+        exit 1
+    fi
+}
+
+# qpdf ships symlinks (e.g. libqpdf.so.30 -> libqpdf.so.30.4.2) as tiny
+# regular files inside the zip; materialize them as real copies so Java-side
+# extraction does not have to understand symlinks.
+materialize_symlinks() {
+    local dir=$1
+    local f target
+    for f in "$dir"/*; do
+        [ -f "$f" ] || continue
+        if [ "$(file_size "$f")" -lt 200 ]; then
+            target=$(cat "$f")
+            case "$target" in
+                *.so*|*.dylib)
+                    if [ -f "$dir/$target" ]; then
+                        cp -f "$dir/$target" "$f"
+                    fi
+                    ;;
+            esac
+        fi
+    done
+}
+
+stage_windows() {
+    local platform=$1 asset=$2
+    verify_asset "$asset"
+    local extract="$downloads/extract-$platform"
+    rm -rf "$extract"
+    mkdir -p "$extract"
+    unzip -q "$downloads/$asset" -d "$extract"
+    local root
+    root=$(find "$extract" -maxdepth 2 -type d -name bin | head -1)
+    root=$(dirname "$root")
+    local dest="$native_res/$platform"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    # qpdf30.dll + the MSVC runtime DLLs it depends on; exes are not bundled.
+    cp "$root"/bin/qpdf*.dll "$dest/"
+    cp "$root"/bin/concrt140.dll "$root"/bin/msvcp140*.dll \
+       "$root"/bin/vcruntime140*.dll "$dest/" 2>/dev/null || true
+    write_manifest "$dest"
+    echo "    ${platform}: $(ls "$dest" | wc -l) files"
+}
+
+stage_unix() {
+    local platform=$1 asset=$2 libglob=$3
+    verify_asset "$asset"
+    local extract="$downloads/extract-$platform"
+    rm -rf "$extract"
+    mkdir -p "$extract"
+    unzip -q "$downloads/$asset" -d "$extract"
+    materialize_symlinks "$extract/lib"
+    local dest="$native_res/$platform"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp "$extract"/lib/$libglob "$dest/"
+    write_manifest "$dest"
+    echo "    ${platform}: $(ls "$dest" | wc -l) files"
+}
+
+# The Java loader cannot enumerate jar resources portably; each platform
+# directory carries its file list.
+write_manifest() {
+    local dest=$1
+    ls -1 "$dest" | grep -v '^files\.txt$' > "$dest/files.txt"
+}
+
+echo "==> staging runtime libraries"
+stage_windows windows-x86_64 "$(platform_asset windows-x86_64)"
+stage_windows windows-x86 "$(platform_asset windows-x86)"
+stage_windows windows-aarch64 "$(platform_asset windows-aarch64)"
+stage_unix linux-x86_64 "$(platform_asset linux-x86_64)" '*.so*'
+stage_unix linux-aarch64 "$(platform_asset linux-aarch64)" '*.so*'
+stage_unix macos-x86_64 "$(platform_asset macos-x86_64)" '*.dylib'
+stage_unix macos-aarch64 "$(platform_asset macos-aarch64)" '*.dylib'
+
+echo "==> staging headers and link libraries for the JNI shim"
+# Headers are portable C; one zip (msvc64) supplies them for every target.
+win_x64_root=$(dirname "$(find "$downloads/extract-windows-x86_64" -maxdepth 2 -type d -name bin | head -1)")
+rm -rf "$staging/include" "$staging/windows-x86_64" "$staging/linux-x86_64" "$staging/macos-x86_64" "$staging/macos-aarch64"
+mkdir -p "$staging/windows-x86_64" "$staging/linux-x86_64" "$staging/macos-x86_64" "$staging/macos-aarch64"
+cp -r "$win_x64_root/include" "$staging/include"
+cp "$win_x64_root/lib/qpdf.lib" "$staging/windows-x86_64/"
+cp "$downloads/extract-linux-x86_64/lib/libqpdf.so.30" "$staging/linux-x86_64/"
+# Each macOS arch links its shim against its own qpdf dylib.
+stage_macos_link_lib() {
+    local platform=$1
+    cp "$downloads/extract-$platform/lib/libqpdf.30.dylib" "$staging/$platform/" 2>/dev/null || \
+        cp "$downloads/extract-$platform/lib/libqpdf."*.dylib "$staging/$platform/"
+}
+stage_macos_link_lib macos-x86_64
+stage_macos_link_lib macos-aarch64
+
+echo "==> done: native resources in ${native_res}, shim staging in ${staging}"

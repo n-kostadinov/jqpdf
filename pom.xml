@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.machineminds</groupId>
+  <artifactId>jqpdf</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>jqpdf</name>
+  <description>JNI wrapper around the qpdf PDF toolkit</description>
+  <url>https://github.com/n-kostadinov/jqpdf</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>n-kostadinov</id>
+      <name>Nikolay Kostadinov</name>
+      <url>https://github.com/n-kostadinov</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/n-kostadinov/jqpdf.git</connection>
+    <developerConnection>scm:git:git@github.com:n-kostadinov/jqpdf.git</developerConnection>
+    <url>https://github.com/n-kostadinov/jqpdf</url>
+  </scm>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+    <!-- qpdf release whose binaries are bundled and compiled against; keep in
+         sync with scripts/fetch-qpdf-binaries and scripts/build-native-shim. -->
+    <qpdf.version>12.4.2</qpdf.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.11.4</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <!-- Native binaries under dev/machineminds/jqpdf/native must be copied
+           verbatim; only version.properties is Maven-filtered. -->
+      <resource>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>dev/machineminds/jqpdf/version.properties</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>dev/machineminds/jqpdf/version.properties</include>
+        </includes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.6.2</version>
+        <executions>
+          <execution>
+            <id>build-native-shim</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <!-- Environment-detecting: compiles every shim whose
+                   toolchain is reachable and warns otherwise. -->
+              <executable>bash</executable>
+              <workingDirectory>${project.basedir}</workingDirectory>
+              <!-- Let JAVA_HOME cross into WSL when "bash" resolves to the
+                   System32 WSL bash (translated to a WSL path by /p).
+                   "classes" tells the script to write the shims into
+                   target/classes; Windows paths would lose their
+                   backslashes across the WSL argument chain. -->
+              <environmentVariables>
+                <WSLENV>JAVA_HOME/p</WSLENV>
+              </environmentVariables>
+              <arguments>
+                <argument>scripts/build-native-shim</argument>
+                <argument>--out</argument>
+                <argument>classes</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- Snapshots go straight to the Central snapshot repo (no validation,
+       no signing); releases go through the central-publishing plugin in the
+       release profile below. Same server id and token credentials. -->
+  <distributionManagement>
+    <snapshotRepository>
+      <id>central</id>
+      <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <profiles>
+    <profile>
+      <!-- The official qpdf macOS binaries statically link OpenSSL without
+           the legacy provider, so every native crypto operation fails
+           there (qpdf: unable to load openssl legacy provider). Tests
+           tagged "native-crypto" are excluded on macOS until qpdf's
+           release builds change; see docs/guides/README.md. -->
+      <id>macos-no-native-crypto</id>
+      <activation>
+        <os>
+          <family>mac</family>
+        </os>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <excludedGroups>native-crypto</excludedGroups>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <!-- Everything Maven Central requires beyond a normal build. Activated
+           only explicitly (-Prelease) so local test/install runs never need
+           a GPG key or Central credentials. -->
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+                <configuration>
+                  <!-- The source plugin also archives resources by default;
+                       skip the bundled native binaries (33 MB). -->
+                  <excludes>
+                    <exclude>dev/machineminds/jqpdf/native/**</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+                <configuration>
+                  <!-- Non-interactive signing for CI; the passphrase comes
+                       in via -Dgpg.passphrase (masked as a secret). -->
+                  <gpgArguments>
+                    <arg>--pinentry-mode</arg>
+                    <arg>loopback</arg>
+                  </gpgArguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.12.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <!-- Server id "central" must exist in settings.xml with the
+                   Central Portal user token (injected by CI). -->
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>true</autoPublish>
+              <waitUntil>published</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

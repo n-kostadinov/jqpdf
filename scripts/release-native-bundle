@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Prepares the bundled native directory for release: prunes platforms the
+# JNI shim is not built for, then verifies every remaining platform
+# directory is complete (fetch manifest + shim). Release packaging runs
+# this before mvn package so the jar only ships platforms that can load.
+set -uo pipefail
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+native="$repo_root/src/main/resources/dev/machineminds/jqpdf/native"
+
+# Platforms whose qpdf binaries scripts/fetch-qpdf-binaries stages but
+# scripts/build-native-shim cannot yet build a shim for.
+unsupported=(linux-aarch64 windows-x86 windows-aarch64)
+
+shim_name() {
+    case $1 in
+        linux-*) echo libjqpdfjni.so ;;
+        windows-*) echo jqpdfjni.dll ;;
+        macos-*) echo libjqpdfjni.dylib ;;
+        *) return 1 ;;
+    esac
+}
+
+for platform in "${unsupported[@]}"; do
+    if [ -d "$native/$platform" ]; then
+        echo "[release-native-bundle] pruning $platform (no JNI shim built)"
+        rm -rf "$native/$platform"
+    fi
+done
+
+status=0
+found=0
+for dir in "$native"/*; do
+    [ -d "$dir" ] || continue
+    platform=$(basename "$dir")
+    found=1
+    if ! shim=$(shim_name "$platform"); then
+        echo "error: unknown platform directory $platform" >&2
+        status=1
+        continue
+    fi
+    for required in files.txt "$shim"; do
+        if [ ! -f "$dir/$required" ]; then
+            echo "error: $platform is missing $required; run scripts/fetch-qpdf-binaries and scripts/build-native-shim first" >&2
+            status=1
+        fi
+    done
+done
+if [ "$found" -eq 0 ]; then
+    echo "error: no platform directories under $native; run scripts/fetch-qpdf-binaries first" >&2
+    status=1
+fi
+
+if [ "$status" -eq 0 ]; then
+    echo "[release-native-bundle] ready: $(ls "$native" | tr '\n' ' ')"
+fi
+exit $status

@@ -1,0 +1,128 @@
+# Publishing to Maven Central
+
+How `dev.machineminds:jqpdf` gets released. The release itself will run in
+GitHub Actions; this page records the release process and the local
+dry-run used to verify a release build without publishing anything.
+
+Credentials — the signing-key identity and its backup, the Central token,
+and which repository secrets are set — live in
+`docs/internal/release-secrets.md`. That directory is git-ignored and
+never committed; do not copy its contents into tracked files.
+
+## Prerequisites (done)
+
+- **Namespace** `dev.machineminds` is verified on the
+  [Central Portal](https://central.sonatype.com).
+- The repository secrets the workflow expects are inventoried in the
+  internal credentials file (see above).
+
+## Release profile
+
+Everything Central requires lives in the `release` Maven profile,
+activated only with `-Prelease`: sources jar (native binaries excluded),
+javadoc jar, GPG signing (`loopback` pinentry for non-interactive use),
+and `central-publishing-maven-plugin` 0.12.0 (`autoPublish=true`,
+`waitUntil=published`). Plain `mvn test`/`install` never needs a key or
+credentials.
+
+Credentials reach Maven through a `settings.xml` with two servers — the
+workflow generates it from secrets:
+
+```xml
+<servers>
+  <server>
+    <id>central</id>
+    <username>${env.CENTRAL_TOKEN_USERNAME}</username>
+    <password>${env.CENTRAL_TOKEN_PASSWORD}</password>
+  </server>
+  <server>
+    <id>gpg.passphrase</id>
+    <passphrase>${env.GPG_PASSPHRASE}</passphrase>
+  </server>
+</servers>
+```
+
+## The release command (as run by the workflow)
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) runs
+these steps on a tag push; shown here as the manual equivalent:
+
+```bash
+# 1. Import the signing key into a fresh keyring
+gpg --batch --import <(echo "$GPG_PRIVATE_KEY")   # or: echo ... | gpg --batch --import -
+
+# 2. Prune unsupported platforms and verify the bundle
+scripts/release-native-bundle
+
+# 3. Set the release version (pom stays on -SNAPSHOT in git)
+mvn versions:set -DnewVersion=1.0.0 -DgenerateBackupPoms=false
+
+# 4. Build, sign, publish
+mvn -Prelease -DskipTests -s settings.xml deploy
+```
+
+The `-Dgpg.passphrase=...` property also works (the plugin reads it
+directly) but is deprecated in `maven-gpg-plugin` 3.x because it can
+leak into logs; the settings.xml server entry above is the supported
+route and is what the workflow should use.
+
+The version must not end in `-SNAPSHOT` when publishing a release:
+snapshot versions are diverted to the Central snapshot repository
+(`distributionManagement` in the pom) and skip validation entirely.
+
+## Release runbook (step by step)
+
+1. **Preconditions** (check once): `gh secret list` shows
+   `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `CENTRAL_TOKEN_USERNAME`,
+   `CENTRAL_TOKEN_PASSWORD`; CI is green on `main`
+   (`gh run list --workflow CI`).
+2. **Local prep**: working tree clean and on latest `main`
+   (`git status`, `git pull`).
+3. **Tag the release**: the tag name is the release version —
+   `git tag v1.0.0 && git push origin v1.0.0`.
+   The pom stays on its `-SNAPSHOT` version in git; the workflow derives
+   `1.0.0` from the tag.
+4. **Watch the workflow** (`gh run watch` or the Actions page). It reruns
+   the full CI matrix, then the publish job imports the signing key,
+   stages the exact natives the tests ran against, prunes unsupported
+   platforms (`scripts/release-native-bundle`), sets the release version,
+   deploys to Central (`autoPublish`, waits until `published`), and
+   creates the GitHub Release with generated notes.
+5. **Verify on Central**: `https://repo1.maven.org/maven2/dev/machineminds/jqpdf/<version>/`
+   lists the jar, sources, javadoc, and `.asc` signatures.
+6. **Edit the GitHub Release** to add the bundled-qpdf line, e.g.
+   `Bundles qpdf 12.4.2` (web UI or
+   `gh release edit v1.0.0 --notes "Bundles qpdf <qpdf.version> …"`).
+7. **Bump the pom** to the next development version
+   (`mvn versions:set -DnewVersion=1.1.0-SNAPSHOT` or similar) and push
+   to `main`.
+
+If publish fails on missing token secrets, set them (see
+`docs/internal/release-secrets.md`) and
+re-run the failed job: `gh run rerun <run-id> --failed`. Publishing a
+version that is already on Central is not possible — fix forward with a
+new patch version instead.
+
+## Local dry-run (nothing uploaded)
+
+```bash
+mvn versions:set -DnewVersion=1.0.0 -DgenerateBackupPoms=false
+mvn -Prelease -DskipTests -DskipUpload=true \
+    -Dgpg.passphrase=$(cat <local passphrase backup — see docs/internal>) \
+    clean deploy
+mvn versions:set -DnewVersion=1.0.0-SNAPSHOT -DgenerateBackupPoms=false
+```
+
+`-DskipUpload=true` (new in plugin 0.12.0) stops after building
+`target/central-publishing/central-bundle.zip`. Check the bundle
+contains `jqpdf-<version>.jar`, `-sources.jar`, `-javadoc.jar`, and
+`.pom`, each with an `.asc` signature and checksums, and that the main
+jar still carries `dev/machineminds/jqpdf/native/` — the natives are
+generated by `scripts/fetch-qpdf-binaries` and
+`scripts/build-native-shim` and are **not** committed, so run those
+first on a fresh checkout.
+
+## Toolchain pin
+
+Build releases with Maven 3.9.x. The `central-publishing-maven-plugin`
+is currently broken with Maven 4.

@@ -1,0 +1,8 @@
+plan/
+AGENTS.md
+docs/internal/
+target/
+.idea/
+build/
+src/main/resources/dev/machineminds/jqpdf/native/
+sudo.txt
