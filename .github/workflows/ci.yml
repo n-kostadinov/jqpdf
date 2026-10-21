@@ -74,10 +74,13 @@ jobs:
       - name: Validate shim architectures
         run: |
           native=src/main/resources/dev/machineminds/jqpdf/native
-          lipo -verify-arch arm64 "$native/macos-aarch64/libjqpdfjni.dylib"
-          lipo -verify-arch x86_64 "$native/macos-x86_64/libjqpdfjni.dylib"
-          lipo -verify-arch x86_64 build/native/macos-x86_64/libqpdf.30.dylib
-          lipo -info "$native"/macos-*/libjqpdfjni.dylib
+          check_arch() {
+            file "$1" | grep -q "$2" || { echo "error: $1 is not $2: $(file "$1")" >&2; exit 1; }
+          }
+          check_arch "$native/macos-aarch64/libjqpdfjni.dylib" arm64
+          check_arch "$native/macos-x86_64/libjqpdfjni.dylib" x86_64
+          check_arch build/native/macos-x86_64/libqpdf.30.dylib x86_64
+          file "$native"/macos-*/libjqpdfjni.dylib
       - name: Upload natives
         uses: actions/upload-artifact@v4
         with:
