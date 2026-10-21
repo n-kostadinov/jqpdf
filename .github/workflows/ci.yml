@@ -98,6 +98,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # The native tests read fixture PDFs from the qpdf checkout that sits
+      # next to the repo on dev machines (Fixtures.QPDF_CHECKOUT).
+      - name: Check out qpdf test fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: qpdf/qpdf
+          ref: v12.4.2 # keep in sync with <qpdf.version> in pom.xml
+          path: ../qpdf
+          fetch-depth: 1
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
