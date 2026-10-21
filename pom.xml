@@ -189,6 +189,14 @@
                 <goals>
                   <goal>jar</goal>
                 </goals>
+                <configuration>
+                  <!-- Terse doc style: no @param/@return boilerplate, so
+                       doclint must not require missing tags. The internal
+                       package stays in the sources jar but out of the
+                       published javadoc. -->
+                  <doclint>all,-missing</doclint>
+                  <excludePackageNames>dev.machineminds.jqpdf.internal</excludePackageNames>
+                </configuration>
               </execution>
             </executions>
           </plugin>
