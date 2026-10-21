@@ -61,32 +61,34 @@
         <version>3.13.0</version>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <version>3.1.0</version>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.6.2</version>
         <executions>
           <execution>
             <id>build-native-shim</id>
             <phase>generate-test-resources</phase>
             <goals>
-              <goal>run</goal>
+              <goal>exec</goal>
             </goals>
             <configuration>
-              <target>
-                <!-- Environment-detecting: compiles every shim whose
-                     toolchain is reachable and warns otherwise. -->
-                <exec executable="bash" dir="${project.basedir}" failonerror="true">
-                  <!-- Let JAVA_HOME cross into WSL when "bash" resolves to the
-                       System32 WSL bash (translated to a WSL path by /p).
-                       "classes" tells the script to write the shims into
-                       target/classes; Windows paths would lose their
-                       backslashes across the WSL argument chain. -->
-                  <env key="WSLENV" value="JAVA_HOME/p"/>
-                  <arg value="scripts/build-native-shim"/>
-                  <arg value="--out"/>
-                  <arg value="classes"/>
-                </exec>
-              </target>
+              <!-- Environment-detecting: compiles every shim whose
+                   toolchain is reachable and warns otherwise. -->
+              <executable>bash</executable>
+              <workingDirectory>${project.basedir}</workingDirectory>
+              <!-- Let JAVA_HOME cross into WSL when "bash" resolves to the
+                   System32 WSL bash (translated to a WSL path by /p).
+                   "classes" tells the script to write the shims into
+                   target/classes; Windows paths would lose their
+                   backslashes across the WSL argument chain. -->
+              <environmentVariables>
+                <WSLENV>JAVA_HOME/p</WSLENV>
+              </environmentVariables>
+              <arguments>
+                <argument>scripts/build-native-shim</argument>
+                <argument>--out</argument>
+                <argument>classes</argument>
+              </arguments>
             </configuration>
           </execution>
         </executions>
