@@ -23,8 +23,16 @@ public interface TransformationOptions {
 
     /** Which streams qpdf attempts to decode. */
     enum DecodeLevel {
-        NONE, GENERALIZED, SPECIALIZED, ALL;
+        /** Decode nothing. */
+        NONE,
+        /** Generalized filters: {@code /FlateDecode}, {@code /LZWDecode}, {@code /ASCII85Decode}, {@code /ASCIIHexDecode} (default). */
+        GENERALIZED,
+        /** Generalized plus non-lossy specialized filters ({@code /RunLengthDecode}). */
+        SPECIALIZED,
+        /** Specialized plus lossy filters ({@code /DCTDecode}, i.e. JPEG). */
+        ALL;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }
@@ -35,8 +43,14 @@ public interface TransformationOptions {
 
     /** Legacy combined compression control. */
     enum StreamData {
-        COMPRESS, PRESERVE, UNCOMPRESS;
+        /** Compress streams, decoding at the generalized level (default). */
+        COMPRESS,
+        /** Leave streams exactly as in the input. */
+        PRESERVE,
+        /** Decode streams but write them uncompressed (QDF-friendly). */
+        UNCOMPRESS;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }
@@ -59,8 +73,14 @@ public interface TransformationOptions {
 
     /** Object stream handling. */
     enum ObjectStreams {
-        PRESERVE, DISABLE, GENERATE;
+        /** Keep object streams as in the input (default). */
+        PRESERVE,
+        /** Write all objects as regular top-level objects (older viewers). */
+        DISABLE,
+        /** Create object streams and compress where possible; forces PDF ≥ 1.5. */
+        GENERATE;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }
@@ -74,8 +94,14 @@ public interface TransformationOptions {
 
     /** {@code --remove-unreferenced-resources=auto|yes|no}: strip unused page resources. */
     enum UnreferencedResources {
-        AUTO, YES, NO;
+        /** Heuristic check first, full analysis only when it hints at shared resources (default). */
+        AUTO,
+        /** Always run the full unused-resource analysis. */
+        YES,
+        /** Disable removal. */
+        NO;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }

@@ -44,10 +44,22 @@ public interface EncryptionOptions {
     /** Configuration of one {@code --encrypt …​ --} group. */
     interface EncryptionConfig {
 
-        /** Restriction levels for {@code --modify} (§5.10). */
+        /** Restriction levels for {@code --modify} (§5.10); level names for 128/256-bit, y/n for 40-bit. */
         enum Modify {
-            ALL("all"), ANNOTATE("annotate"), FORM("form"), ASSEMBLY("assembly"), NONE("none"),
-            YES("y"), NO("n");
+            /** No modification restrictions (128/256-bit default). */
+            ALL("all"),
+            /** Allow annotation editing, form filling, and assembly; restrict other modifications. */
+            ANNOTATE("annotate"),
+            /** Allow form filling; restrict annotation editing, assembly, and other modifications. */
+            FORM("form"),
+            /** Allow assembly (rotate/reorder pages); restrict everything else. */
+            ASSEMBLY("assembly"),
+            /** Restrict every kind of modification. */
+            NONE("none"),
+            /** 40-bit all-or-nothing: allow modifications. */
+            YES("y"),
+            /** 40-bit all-or-nothing: restrict modifications. */
+            NO("n");
 
             private final String cliValue;
 
@@ -55,14 +67,24 @@ public interface EncryptionOptions {
                 this.cliValue = cliValue;
             }
 
+            /** The CLI token this value maps to. */
             public String cliValue() {
                 return cliValue;
             }
         }
 
-        /** Restriction levels for {@code --print} (§5.10). */
+        /** Restriction levels for {@code --print} (§5.10); level names for 128/256-bit, y/n for 40-bit. */
         enum Print {
-            FULL("full"), LOW("low"), NONE("none"), YES("y"), NO("n");
+            /** Full-resolution printing (128/256-bit default). */
+            FULL("full"),
+            /** Low-resolution printing only. */
+            LOW("low"),
+            /** No printing. */
+            NONE("none"),
+            /** 40-bit all-or-nothing: allow printing. */
+            YES("y"),
+            /** 40-bit all-or-nothing: no printing. */
+            NO("n");
 
             private final String cliValue;
 
@@ -70,6 +92,7 @@ public interface EncryptionOptions {
                 this.cliValue = cliValue;
             }
 
+            /** The CLI token this value maps to. */
             public String cliValue() {
                 return cliValue;
             }

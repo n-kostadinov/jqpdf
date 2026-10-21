@@ -23,8 +23,14 @@ public interface JsonOptions {
 
     /** Where stream data goes in JSON output. */
     enum JsonStreamData {
-        NONE, INLINE, FILE;
+        /** Omit stream data (default; {@code jsonOutput()} upgrades this to inline). */
+        NONE,
+        /** Base64 stream data in each stream object's {@code data} key. */
+        INLINE,
+        /** Each stream written to a {@code <prefix>-<object-number>} file; see {@link #jsonStreamPrefix(String)}. */
+        FILE;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }

@@ -10,8 +10,16 @@ public interface AdvancedControlOptions {
 
     /** Interpretation of {@code password(...)} for the main input. */
     enum PasswordMode {
-        AUTO, UNICODE, BYTES, HEX_BYTES;
+        /** Detect UTF-8 and transcode per the PDF spec (default). */
+        AUTO,
+        /** Require valid UTF-8; invalid sequences are an error. */
+        UNICODE,
+        /** Use the password's literal bytes (legacy workaround; files other readers may not open). */
+        BYTES,
+        /** Decode the password as hex; the only mode that also affects passwords used for reading. */
+        HEX_BYTES;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase().replace('_', '-');
         }

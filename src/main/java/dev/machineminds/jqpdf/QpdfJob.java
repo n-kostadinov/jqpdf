@@ -23,7 +23,19 @@ import dev.machineminds.jqpdf.options.TransformationOptions;
  * <p>The interface extends one options interface per qpdf functional area;
  * every option method returns {@code QpdfJob} so calls chain freely. Options
  * are recorded in call order, matching the CLI's "later options override
- * earlier ones" semantics.
+ * earlier ones" semantics. Option methods reject blank or out-of-range
+ * arguments immediately with {@link QpdfUsageException}.
+ *
+ * <p>Example — linearize a file and fail on errors:
+ *
+ * <pre>{@code
+ * JobResult result = Jqpdf.createJob()
+ *         .input("in.pdf")
+ *         .linearize()
+ *         .output("out.pdf")
+ *         .run()
+ *         .orThrow();
+ * }</pre>
  *
  * <p>Concurrency: a single job may not be configured or run from two threads
  * at once (qpdf jobs are single-threaded objects); separate jobs run in
@@ -73,12 +85,22 @@ public interface QpdfJob extends GeneralOptions, AdvancedControlOptions, Transfo
      * Runs the job: synthesizes argv, configures and runs a fresh native
      * qpdf job, and returns its outcome. The builder stays intact, so a job
      * can be re-configured and run again.
+     *
+     * @throws QpdfUsageException when the builder state could never form a
+     *         valid invocation (no input configured, or {@link #replaceInput()}
+     *         combined with an in-memory input)
+     * @throws IllegalStateException when a configured temporary directory is
+     *         missing, not a directory, or not writable
+     * @throws java.io.UncheckedIOException when spilling an in-memory input
+     *         or content option to its temporary file fails
      */
     JobResult run();
 
     /**
      * Runs the job described by a QPDFJob JSON document (spec §7) as-is,
      * ignoring the builder's options. Same result contract as {@link #run()}.
+     *
+     * @throws QpdfUsageException when {@code jobJson} is blank
      */
     JobResult runFromJson(String jobJson);
 }

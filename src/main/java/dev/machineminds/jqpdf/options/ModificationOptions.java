@@ -24,10 +24,20 @@ public interface ModificationOptions {
     /** One {@code --pages …​ --} group's file/range/password entries. */
     interface PagesGroup {
 
+        /**
+         * Adds a page-source file; subsequent {@code range}/{@code password}
+         * calls apply to it until the next {@code file}. {@code "."} refers to
+         * the primary input.
+         */
         PagesGroup file(String file);
 
+        /**
+         * Pages to take from the most recent {@code file} in the page-range
+         * grammar (spec §10.1); omitted when all pages are wanted.
+         */
         PagesGroup range(String pageRange);
 
+        /** Password for the most recent {@code file}, needed once per distinct file path. */
         PagesGroup password(String password);
     }
 
@@ -48,8 +58,14 @@ public interface ModificationOptions {
 
     /** Which annotations {@code --flatten-annotations} pushes into page content. */
     enum FlattenAnnotations {
-        ALL, PRINT, SCREEN;
+        /** Everything not marked invisible or hidden. */
+        ALL,
+        /** Only annotations that should appear when the page is printed. */
+        PRINT,
+        /** Everything that should appear on screen; print-only annotations omitted. */
+        SCREEN;
 
+        /** The CLI token this value maps to. */
         public String cliValue() {
             return name().toLowerCase();
         }

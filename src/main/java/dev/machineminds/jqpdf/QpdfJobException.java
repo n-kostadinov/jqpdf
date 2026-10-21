@@ -10,6 +10,10 @@ public class QpdfJobException extends RuntimeException {
 
     private final JobResult result;
 
+    /**
+     * Builds the exception from the failed job's result; the message combines
+     * the exit code with qpdf's error output.
+     */
     public QpdfJobException(JobResult result) {
         super("qpdf job failed with exit code " + result.exitCode()
                 + (result.errorText().isBlank() ? "" : ":" + System.lineSeparator() + result.errorText()));

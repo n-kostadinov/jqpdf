@@ -11,6 +11,7 @@ public class QpdfUsageException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    /** Builds the exception with the usage-error message. */
     public QpdfUsageException(String message) {
         super(message);
     }

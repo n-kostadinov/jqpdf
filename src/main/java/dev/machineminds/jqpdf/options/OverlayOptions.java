@@ -23,8 +23,10 @@ public interface OverlayOptions {
     /** One overlay/underlay group (spec §5.9). */
     interface OverlayConfig {
 
+        /** The overlay/underlay source file (required). */
         OverlayConfig file(String file);
 
+        /** Password for {@code file} if it is encrypted. */
         OverlayConfig password(String password);
 
         /** Destination pages in the output; default all. */

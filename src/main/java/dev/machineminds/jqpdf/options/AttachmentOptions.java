@@ -20,6 +20,7 @@ public interface AttachmentOptions {
     /** One {@code --add-attachment …​ --} group (spec §5.11). */
     interface AttachmentConfig {
 
+        /** The file to embed; exactly one of {@code file} or {@link #content(byte[])} is required. */
         AttachmentConfig file(String file);
 
         /**
@@ -58,11 +59,13 @@ public interface AttachmentOptions {
     /** One {@code --copy-attachments-from …​ --} group. */
     interface CopyAttachmentsConfig {
 
+        /** The file whose attachments are copied (required). */
         CopyAttachmentsConfig file(String file);
 
         /** Prefix prepended to copied attachment keys to resolve conflicts. */
         CopyAttachmentsConfig prefix(String prefix);
 
+        /** Password for {@code file} if it is encrypted. */
         CopyAttachmentsConfig password(String password);
     }
 

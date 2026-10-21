@@ -26,7 +26,11 @@ public final class JobResult {
         this.savedData = savedData;
     }
 
-    /** Drains a finished job's capture buffers into a result. */
+    /**
+     * Drains a finished job's capture buffers into a result. For
+     * {@link QpdfNative} adapter implementations; library callers get their
+     * results from {@link QpdfJob#run()}.
+     */
     public static JobResult capture(QpdfNative qpdf, long job, int exitCode) {
         return new JobResult(
                 exitCode,
@@ -56,8 +60,10 @@ public final class JobResult {
     }
 
     /**
-     * Returns this result, throwing {@link QpdfJobException} when the job
-     * failed with errors (exit 2). Warnings do not throw.
+     * Returns this result, or throws if the job failed with errors.
+     *
+     * @throws QpdfJobException when the job failed with errors (exit code 2);
+     *         warnings (exit code 3) do not throw
      */
     public JobResult orThrow() {
         if (exitCode == 2) {
