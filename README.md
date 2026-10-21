@@ -16,6 +16,14 @@ implemented and tested; see [API reference](#api-reference) below.
 [Maven Central](https://central.sonatype.com/artifact/dev.machineminds/jqpdf)
 and attached to the [GitHub releases](https://github.com/n-kostadinov/jqpdf/releases).
 
+```xml
+<dependency>
+  <groupId>dev.machineminds</groupId>
+  <artifactId>jqpdf</artifactId>
+  <version>1.0.0</version>
+</dependency>
+```
+
 ## Run/use requirements
 
 - Java 11+ at runtime
@@ -118,6 +126,8 @@ job so one job's `global(...)` settings cannot leak into another's run —
 see [global limits and testing](docs/guides/global-limits.md).
 
 ## API reference
+
+Hosted javadoc: <https://javadoc.io/doc/dev.machineminds/jqpdf>.
 
 One interface per qpdf functional area, all mixed into
 [`QpdfJob`](src/main/java/dev/machineminds/jqpdf/QpdfJob.java); every option
