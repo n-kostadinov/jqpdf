@@ -24,21 +24,26 @@ staging="build/native"
 native_res="src/main/resources/dev/machineminds/jqpdf/native"
 mkdir -p "$downloads" "$staging"
 
-# Asset name per bundled platform directory.
-declare -A platform_assets=(
-    [windows-x86_64]="qpdf-${qpdf_version}-msvc64.zip"
-    [windows-x86]="qpdf-${qpdf_version}-msvc32.zip"
-    [windows-aarch64]="qpdf-${qpdf_version}-msvc-arm64.zip"
-    [linux-x86_64]="qpdf-${qpdf_version}-bin-linux-x86_64.zip"
-    [linux-aarch64]="qpdf-${qpdf_version}-bin-linux-aarch64.zip"
-    [macos-x86_64]="qpdf-${qpdf_version}-bin-macos-x86_64.zip"
-    [macos-aarch64]="qpdf-${qpdf_version}-bin-macos-arm64.zip"
-)
+# Asset name per bundled platform directory. A case lookup instead of an
+# associative array: macOS still ships bash 3.2 as /bin/bash.
+platform_asset() {
+    case $1 in
+        windows-x86_64)  echo "qpdf-${qpdf_version}-msvc64.zip" ;;
+        windows-x86)     echo "qpdf-${qpdf_version}-msvc32.zip" ;;
+        windows-aarch64) echo "qpdf-${qpdf_version}-msvc-arm64.zip" ;;
+        linux-x86_64)    echo "qpdf-${qpdf_version}-bin-linux-x86_64.zip" ;;
+        linux-aarch64)   echo "qpdf-${qpdf_version}-bin-linux-aarch64.zip" ;;
+        macos-x86_64)    echo "qpdf-${qpdf_version}-bin-macos-x86_64.zip" ;;
+        macos-aarch64)   echo "qpdf-${qpdf_version}-bin-macos-arm64.zip" ;;
+    esac
+}
+
+bundled_platforms="windows-x86_64 windows-x86 windows-aarch64 linux-x86_64 linux-aarch64 macos-x86_64 macos-aarch64"
 
 echo "==> qpdf ${qpdf_version}: downloading release assets (cached in ${downloads})"
 patterns=(--pattern "qpdf-${qpdf_version}.sha256")
-for asset in $(printf '%s\n' "${platform_assets[@]}" | sort -u); do
-    patterns+=(--pattern "$asset")
+for platform in $bundled_platforms; do
+    patterns+=(--pattern "$(platform_asset "$platform")")
 done
 gh release download "v${qpdf_version}" \
     --repo qpdf/qpdf \
@@ -145,13 +150,13 @@ write_manifest() {
 }
 
 echo "==> staging runtime libraries"
-stage_windows windows-x86_64 "${platform_assets[windows-x86_64]}"
-stage_windows windows-x86 "${platform_assets[windows-x86]}"
-stage_windows windows-aarch64 "${platform_assets[windows-aarch64]}"
-stage_unix linux-x86_64 "${platform_assets[linux-x86_64]}" '*.so*'
-stage_unix linux-aarch64 "${platform_assets[linux-aarch64]}" '*.so*'
-stage_unix macos-x86_64 "${platform_assets[macos-x86_64]}" '*.dylib'
-stage_unix macos-aarch64 "${platform_assets[macos-aarch64]}" '*.dylib'
+stage_windows windows-x86_64 "$(platform_asset windows-x86_64)"
+stage_windows windows-x86 "$(platform_asset windows-x86)"
+stage_windows windows-aarch64 "$(platform_asset windows-aarch64)"
+stage_unix linux-x86_64 "$(platform_asset linux-x86_64)" '*.so*'
+stage_unix linux-aarch64 "$(platform_asset linux-aarch64)" '*.so*'
+stage_unix macos-x86_64 "$(platform_asset macos-x86_64)" '*.dylib'
+stage_unix macos-aarch64 "$(platform_asset macos-aarch64)" '*.dylib'
 
 echo "==> staging headers and link libraries for the JNI shim"
 # Headers are portable C; one zip (msvc64) supplies them for every target.
