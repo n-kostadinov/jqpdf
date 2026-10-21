@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -311,6 +312,7 @@ class ModificationOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void removeInfoKeepsOnlyTheModificationDate(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("metadata-crypt-filter.pdf");
@@ -338,6 +340,7 @@ class ModificationOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void removeMetadataRemovesTheXmpStream(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("metadata-crypt-filter.pdf");

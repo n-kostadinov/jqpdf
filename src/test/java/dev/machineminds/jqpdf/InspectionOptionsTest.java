@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -88,6 +89,7 @@ class InspectionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void isEncryptedDistinguishesEncryptedFiles() {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path encrypted = assumePdf("20-pages.pdf");
@@ -103,6 +105,7 @@ class InspectionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void requiresPasswordRecognizesTheCorrectPassword() {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path encrypted = assumePdf("20-pages.pdf");
@@ -132,6 +135,7 @@ class InspectionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void hexEncryptionKeyOpensTheFileWithoutAPassword() {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path encrypted = assumePdf("20-pages.pdf");

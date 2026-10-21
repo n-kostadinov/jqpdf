@@ -128,6 +128,31 @@
 
   <profiles>
     <profile>
+      <!-- The official qpdf macOS binaries statically link OpenSSL without
+           the legacy provider, so every native crypto operation fails
+           there (qpdf: unable to load openssl legacy provider). Tests
+           tagged "native-crypto" are excluded on macOS until qpdf's
+           release builds change; see docs/guides/README.md. -->
+      <id>macos-no-native-crypto</id>
+      <activation>
+        <os>
+          <family>mac</family>
+        </os>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <excludedGroups>native-crypto</excludedGroups>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
       <!-- Everything Maven Central requires beyond a normal build. Activated
            only explicitly (-Prelease) so local test/install runs never need
            a GPG key or Central credentials. -->

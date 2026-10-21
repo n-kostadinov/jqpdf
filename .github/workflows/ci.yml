@@ -123,6 +123,8 @@ jobs:
           name: natives-macos
           path: src/main/resources/dev/machineminds/jqpdf/native
       - name: Run tests
+        # bash on every OS: pwsh mangles -D properties for mvn.cmd
+        shell: bash
         env:
           QPDF_CHECKOUT: ${{ github.workspace }}/qpdf-checkout
         run: mvn -B -Dexec.skip=true test

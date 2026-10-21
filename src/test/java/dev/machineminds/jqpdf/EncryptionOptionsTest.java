@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -67,6 +68,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void aes256RoundTrip(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
@@ -89,6 +91,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void weakCryptoIsRejectedUnlessAllowed(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
@@ -108,6 +111,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void copyEncryptionReusesAnotherFilesParameters(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path source = assumePdf("V4.pdf");
@@ -180,6 +184,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void aes128RoundTrip(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
@@ -208,6 +213,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void rc4_40RoundTripWithWeakCryptoAllowed(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
@@ -261,6 +267,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void cleartextMetadataStoresXmpUnencrypted(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("metadata-crypt-filter.pdf");
@@ -287,6 +294,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void forceV4AndForceR5SelectLegacyRevisions(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
@@ -335,6 +343,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void removeRestrictionsDisablesTheSignatures(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("minimal-signed-restricted.pdf");
@@ -394,6 +403,7 @@ class EncryptionOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void encryptionFilePasswordUnlocksTheCopySource(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path source = assumePdf("20-pages.pdf");
