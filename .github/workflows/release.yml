@@ -54,6 +54,8 @@ jobs:
       - name: Generate Maven settings
         run: |
           # Secrets arrive as env vars; Maven resolves ${env.*} at read time.
+          # versions:set is a direct goal and never creates target/.
+          mkdir -p target
           cat > target/release-settings.xml <<'EOF'
           <settings>
             <servers>
