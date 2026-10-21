@@ -8,11 +8,18 @@ import org.junit.jupiter.api.Assumptions;
 /** Access to the qpdf checkout's test PDFs and small helpers shared by tests. */
 public final class Fixtures {
 
-    /** Root of the qpdf CLI test fixtures (the sibling qpdf checkout). */
-    public static final Path QPDF_TEST_PDFS = Path.of("..", "qpdf", "qpdf", "qtest", "qpdf");
+    /**
+     * Root of the qpdf checkout itself, for fixtures in other test trees.
+     * Defaults to the dev-machine layout (sibling checkout at {@code ../qpdf});
+     * CI overrides the location via the {@code QPDF_CHECKOUT} environment
+     * variable.
+     */
+    public static final Path QPDF_CHECKOUT = Path.of(
+            System.getenv().getOrDefault("QPDF_CHECKOUT", "../qpdf"));
 
-    /** Root of the qpdf checkout itself, for fixtures in other test trees. */
-    public static final Path QPDF_CHECKOUT = Path.of("..", "qpdf");
+    /** Root of the qpdf CLI test fixtures (under the qpdf checkout). */
+    public static final Path QPDF_TEST_PDFS = QPDF_CHECKOUT
+            .resolve("qpdf").resolve("qtest").resolve("qpdf");
 
     private Fixtures() {
     }
