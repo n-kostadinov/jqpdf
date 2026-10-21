@@ -6,11 +6,12 @@
 
   <groupId>dev.machineminds</groupId>
   <artifactId>jqpdf</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>1.0.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
   <name>jqpdf</name>
   <description>JNI wrapper around the qpdf PDF toolkit</description>
+  <url>https://github.com/n-kostadinov/jqpdf</url>
 
   <licenses>
     <license>
@@ -18,6 +19,20 @@
       <url>https://opensource.org/licenses/MIT</url>
     </license>
   </licenses>
+
+  <developers>
+    <developer>
+      <id>n-kostadinov</id>
+      <name>Nikolay Kostadinov</name>
+      <url>https://github.com/n-kostadinov</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/n-kostadinov/jqpdf.git</connection>
+    <developerConnection>scm:git:git@github.com:n-kostadinov/jqpdf.git</developerConnection>
+    <url>https://github.com/n-kostadinov/jqpdf</url>
+  </scm>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -100,4 +115,95 @@
       </plugin>
     </plugins>
   </build>
+
+  <!-- Snapshots go straight to the Central snapshot repo (no validation,
+       no signing); releases go through the central-publishing plugin in the
+       release profile below. Same server id and token credentials. -->
+  <distributionManagement>
+    <snapshotRepository>
+      <id>central</id>
+      <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <profiles>
+    <profile>
+      <!-- Everything Maven Central requires beyond a normal build. Activated
+           only explicitly (-Prelease) so local test/install runs never need
+           a GPG key or Central credentials. -->
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+                <configuration>
+                  <!-- The source plugin also archives resources by default;
+                       skip the bundled native binaries (33 MB). -->
+                  <excludes>
+                    <exclude>dev/machineminds/jqpdf/native/**</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.11.2</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.7</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+                <configuration>
+                  <!-- Non-interactive signing for CI; the passphrase comes
+                       in via -Dgpg.passphrase (masked as a secret). -->
+                  <gpgArguments>
+                    <arg>--pinentry-mode</arg>
+                    <arg>loopback</arg>
+                  </gpgArguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.12.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <!-- Server id "central" must exist in settings.xml with the
+                   Central Portal user token (injected by CI). -->
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>true</autoPublish>
+              <waitUntil>published</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
