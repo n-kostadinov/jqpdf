@@ -106,4 +106,114 @@ class AttachmentOptionsTest {
                         .addAttachment(a -> a.key("k")).run());
         assertEquals(0, fake.runCount());
     }
+
+    @Test
+    void attachmentMetadataIsRecorded(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path attached = temp.resolve("note.txt");
+        Files.write(attached, "payload".getBytes(StandardCharsets.UTF_8));
+        Path withAttachment = temp.resolve("with-attachment.pdf");
+
+        Jqpdf.createJob()
+                .input(input.toString()).output(withAttachment.toString())
+                .addAttachment(a -> a
+                        .file(attached.toString())
+                        .key("note.txt")
+                        .filename("display-name.txt")
+                        .description("a note")
+                        .mimetype("text/plain")
+                        .creationdate("D:20210207211528Z")
+                        .moddate("D:20210208120000Z"))
+                .run().orThrow();
+
+        String listing = Jqpdf.createJob()
+                .input(withAttachment.toString())
+                .listAttachments().verbose()
+                .run().orThrow().infoText();
+        assertTrue(listing.contains("description: a note"),
+                "the description is listed, got: " + listing);
+        assertTrue(listing.contains("preferred name: display-name.txt"),
+                "the display filename differs from the key, got: " + listing);
+        assertTrue(listing.contains("mime type: text/plain"),
+                "the mime type is stored, got: " + listing);
+        assertTrue(listing.contains("creation date: D:20210207211528")
+                        && listing.contains("modification date: D:20210208120000"),
+                "the supplied PDF dates are stored, got: " + listing);
+    }
+
+    @Test
+    void replaceAttachmentResolvesDuplicateKeys(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path attached = temp.resolve("note.txt");
+        Files.write(attached, "payload".getBytes(StandardCharsets.UTF_8));
+
+        JobResult rejected = Jqpdf.createJob()
+                .input(input.toString()).output(temp.resolve("dup.pdf").toString())
+                .addAttachment(a -> a.file(attached.toString()).key("note.txt"))
+                .addAttachment(a -> a.file(attached.toString()).key("note.txt"))
+                .run();
+        assertEquals(2, rejected.exitCode(),
+                "a duplicate key is an error without --replace; error: "
+                        + rejected.errorText());
+
+        JobResult replaced = Jqpdf.createJob()
+                .input(input.toString()).output(temp.resolve("dup.pdf").toString())
+                .addAttachment(a -> a.file(attached.toString()).key("note.txt"))
+                .addAttachment(a -> a.file(attached.toString()).key("note.txt").replace())
+                .run();
+        assertEquals(0, replaced.exitCode(),
+                "--replace allows the duplicate key; error: " + replaced.errorText());
+        assertEquals(1, countListedAttachments(
+                Jqpdf.createJob().input(temp.resolve("dup.pdf").toString())
+                        .listAttachments().run().orThrow().infoText()),
+                "exactly one attachment with that key remains");
+    }
+
+    @Test
+    void copyAttachmentsFromWithPrefixResolvesConflicts(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        byte[] payload = "copy me".getBytes(StandardCharsets.UTF_8);
+        Path attached = temp.resolve("note.txt");
+        Files.write(attached, payload);
+        Path source = temp.resolve("source.pdf");
+        attachNote(input, attached, source);
+        Path target = temp.resolve("target.pdf");
+        attachNote(input, attached, target);
+
+        JobResult rejected = Jqpdf.createJob()
+                .input(target.toString()).output(temp.resolve("copied.pdf").toString())
+                .copyAttachmentsFrom(c -> c.file(source.toString()))
+                .run();
+        assertEquals(2, rejected.exitCode(),
+                "copying onto a conflicting key is an error; error: " + rejected.errorText());
+
+        Path copied = temp.resolve("copied.pdf");
+        Jqpdf.createJob()
+                .input(target.toString()).output(copied.toString())
+                .copyAttachmentsFrom(c -> c.file(source.toString()).prefix("copy-"))
+                .run().orThrow();
+
+        String listing = Jqpdf.createJob().input(copied.toString())
+                .listAttachments().run().orThrow().infoText();
+        assertTrue(listing.contains("note.txt") && listing.contains("copy-note.txt"),
+                "the prefix keeps both attachments distinct, got: " + listing);
+        assertArrayEquals(payload,
+                Jqpdf.createJob().input(copied.toString())
+                        .showAttachment("copy-note.txt").run().orThrow().savedData(),
+                "the copied attachment carries the source's bytes");
+    }
+
+    private static void attachNote(Path input, Path attached, Path output) {
+        Jqpdf.createJob()
+                .input(input.toString()).output(output.toString())
+                .addAttachment(a -> a.file(attached.toString()).key("note.txt"))
+                .run().orThrow();
+    }
+
+    private static int countListedAttachments(String listing) {
+        return (int) listing.lines().filter(line -> line.contains(" -> ")).count();
+    }
 }

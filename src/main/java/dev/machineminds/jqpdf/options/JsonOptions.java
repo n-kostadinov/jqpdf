@@ -39,7 +39,7 @@ public interface JsonOptions {
     /** {@code --json-output}: faithful-serialization presets (implies --json). */
     QpdfJob jsonOutput();
 
-    /** {@code --json-output=1|2}: as {@link #jsonOutput()} with an explicit version. */
+    /** {@code --json-output=2}: the only version with faithful-serialization presets. */
     QpdfJob jsonOutput(int version);
 
     /** {@code --json-input}: treat the input file as qpdf JSON. */

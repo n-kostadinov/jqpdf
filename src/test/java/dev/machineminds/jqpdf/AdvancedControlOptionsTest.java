@@ -55,4 +55,98 @@ class AdvancedControlOptionsTest {
         assertTrue(result.errorText().contains("damage") || result.errorText().contains("error"),
                 "error text should explain the failure, got: " + result.errorText());
     }
+
+    @Test
+    void passwordModeHexBytesOpensEncryptedFixture(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("20-pages.pdf");
+
+        // hex-bytes is the only mode that also affects reading: the hex
+        // decodes to the raw password bytes ("user" -> 75 73 65 72).
+        JobResult result = Jqpdf.createJob()
+                .input(input.toString())
+                .passwordMode(PasswordMode.HEX_BYTES)
+                .password("75736572")
+                .output(temp.resolve("out.pdf").toString())
+                .run();
+
+        assertEquals(0, result.exitCode(),
+                "the hex-decoded password must open the file; error: " + result.errorText());
+    }
+
+    @Test
+    void passwordModeUnicodeRoundTripsNonAsciiPassword(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path encrypted = temp.resolve("enc.pdf");
+        String userPassword = "парола";
+
+        Jqpdf.createJob()
+                .input(input.toString()).output(encrypted.toString())
+                .encrypt(enc -> enc.bits256()
+                        .userPassword(userPassword)
+                        .ownerPassword("собственик"))
+                .run().orThrow();
+
+        JobResult reopened = Jqpdf.createJob()
+                .input(encrypted.toString())
+                .passwordMode(PasswordMode.UNICODE)
+                .password(userPassword)
+                .showNpages()
+                .run();
+
+        assertEquals(0, reopened.exitCode(),
+                "a UTF-8 password must reopen the file in unicode mode; error: "
+                        + reopened.errorText());
+        assertTrue(reopened.infoText().trim().endsWith("11"),
+                "all pages readable, got: '" + reopened.infoText() + "'");
+    }
+
+    @Test
+    void suppressPasswordRecoveryStillChecksTheExactPassword(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("20-pages.pdf");
+
+        JobResult exact = Jqpdf.createJob()
+                .input(input.toString())
+                .suppressPasswordRecovery()
+                .password("user")
+                .showNpages()
+                .run();
+        JobResult wrong = Jqpdf.createJob()
+                .input(input.toString())
+                .suppressPasswordRecovery()
+                .password("wrong")
+                .showNpages()
+                .run();
+
+        assertEquals(0, exact.exitCode(),
+                "an exact ASCII password needs no recovery; error: " + exact.errorText());
+        assertEquals(2, wrong.exitCode(), "a wrong password fails without recovery retries");
+    }
+
+    @Test
+    void ignoreXrefStreamsFallsBackToTheClassicXrefTable(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        // A pure xref-stream file has nothing to fall back to and is expected
+        // to fail; hybrid-xref.pdf carries a classic table alongside the
+        // stream, which is what the option is for (spec §5.6).
+        Path input = assumePdf("hybrid-xref.pdf");
+
+        JobResult plain = Jqpdf.createJob()
+                .input(input.toString())
+                .showNpages()
+                .run().orThrow();
+        JobResult ignoring = Jqpdf.createJob()
+                .input(input.toString())
+                .ignoreXrefStreams()
+                .showNpages()
+                .run();
+
+        assertEquals(0, ignoring.exitCode(),
+                "the classic xref table must keep the file readable; error: "
+                        + ignoring.errorText());
+        assertEquals(plain.infoText(), ignoring.infoText(),
+                "both cross-reference sources describe the same document");
+    }
 }

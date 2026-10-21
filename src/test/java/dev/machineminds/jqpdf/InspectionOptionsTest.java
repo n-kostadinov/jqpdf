@@ -8,12 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import dev.machineminds.jqpdf.test.FakeQpdfNative;
 
@@ -173,5 +175,121 @@ class InspectionOptionsTest {
                 "stream object lookup must not fail; error: " + result.errorText());
         assertTrue(result.savedData().length > 0,
                 "raw stream bytes should arrive in savedData");
+    }
+
+    @Test
+    void filteredStreamDataDecodesTheContentStream() {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        JobResult raw = Jqpdf.createJob()
+                .input(input.toString())
+                .showObject("15,0").rawStreamData()
+                .run().orThrow();
+        JobResult filtered = Jqpdf.createJob()
+                .input(input.toString())
+                .showObject("15,0").filteredStreamData()
+                .run().orThrow();
+
+        String decoded = new String(filtered.savedData(), StandardCharsets.ISO_8859_1);
+        assertTrue(filtered.savedData().length != raw.savedData().length,
+                "the flate-compressed stream decodes to different bytes");
+        assertTrue(decoded.contains("BT") || decoded.contains("q"),
+                "the decoded content is readable drawing operators, got: " + decoded);
+    }
+
+    @Test
+    void checkLinearizationDistinguishesLinearizedFiles(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path linearized = temp.resolve("linearized.pdf");
+        Jqpdf.createJob()
+                .input(input.toString()).output(linearized.toString())
+                .linearize()
+                .run().orThrow();
+
+        JobResult linear = Jqpdf.createJob()
+                .input(linearized.toString()).checkLinearization().run();
+        JobResult plain = Jqpdf.createJob()
+                .input(input.toString()).checkLinearization().run();
+
+        assertEquals(0, linear.exitCode(),
+                "the hint tables of our own linearized output check out; info: "
+                        + linear.infoText() + linear.warnText());
+        assertTrue(linear.infoText().contains("no linearization errors"),
+                "a checked linearized file reports success, got: " + linear.infoText());
+        assertEquals(0, plain.exitCode(), "a non-linearized file is not an error");
+        assertTrue(plain.infoText().contains("is not linearized"),
+                "the plain file is reported as not linearized, got: " + plain.infoText());
+    }
+
+    @Test
+    void showLinearizationDumpsTheHintTables(@TempDir Path temp) {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path linearized = temp.resolve("linearized.pdf");
+        Jqpdf.createJob()
+                .input(input.toString()).output(linearized.toString())
+                .linearize()
+                .run().orThrow();
+
+        JobResult result = Jqpdf.createJob()
+                .input(linearized.toString()).showLinearization()
+                .run().orThrow();
+
+        String lower = result.infoText().toLowerCase();
+        assertTrue(lower.contains("page") && lower.contains("offset"),
+                "the hint table dump lists pages and offsets, got: " + result.infoText());
+    }
+
+    @Test
+    void showXrefDumpsTheCrossReferenceTable() {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        JobResult result = Jqpdf.createJob()
+                .input(input.toString()).showXref()
+                .run().orThrow();
+
+        String info = result.infoText();
+        assertTrue(info.contains("offset") && info.contains("uncompressed"),
+                "the dump lists per-object offsets and storage, got: " + info);
+        assertTrue(info.lines().count() >= 26,
+                "every object of the fixture gets a line, got " + info.lines().count());
+    }
+
+    @Test
+    void showPagesListsEveryPagesContent() {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        JobResult npages = Jqpdf.createJob().input(input.toString()).showNpages()
+                .run().orThrow();
+        JobResult pages = Jqpdf.createJob().input(input.toString()).showPages()
+                .run().orThrow();
+
+        int listed = (int) Pattern.compile("(?m)^page \\d+:")
+                .matcher(pages.infoText()).results().count();
+        assertEquals(Integer.parseInt(npages.infoText().trim()), listed,
+                "--show-pages lists one block per page");
+        assertTrue(pages.infoText().contains("content:"),
+                "each block lists the page's content streams");
+    }
+
+    @Test
+    void withImagesAddsImageEntriesToThePageBlocks() {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("image-streams.pdf");
+
+        JobResult plain = Jqpdf.createJob().input(input.toString()).showPages()
+                .run().orThrow();
+        JobResult withImages = Jqpdf.createJob().input(input.toString())
+                .showPages().withImages()
+                .run().orThrow();
+
+        assertFalse(plain.infoText().contains("images:"),
+                "image entries appear only on request");
+        assertTrue(withImages.infoText().contains("images:"),
+                "--with-images lists the page's images, got: " + withImages.infoText());
     }
 }

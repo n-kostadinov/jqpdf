@@ -623,8 +623,10 @@ public final class QpdfJobImpl implements QpdfJob {
 
     @Override
     public QpdfJob jsonOutput(int version) {
-        if (version != 1 && version != 2) {
-            throw new QpdfUsageException("json-output version must be 1 or 2, got " + version);
+        if (version != 2) {
+            throw new QpdfUsageException(
+                    "json-output version must be 2 (the only version with faithful-serialization"
+                            + " presets; use jsonOutput() for the latest), got " + version);
         }
         options.add("--json-output=" + version);
         return this;

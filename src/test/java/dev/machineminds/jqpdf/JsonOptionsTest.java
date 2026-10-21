@@ -3,6 +3,7 @@ package dev.machineminds.jqpdf;
 import static dev.machineminds.jqpdf.test.Fixtures.assumePdf;
 import static dev.machineminds.jqpdf.test.Fixtures.nativeAvailable;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -50,6 +51,9 @@ class JsonOptionsTest {
         FakeQpdfNative fake = new FakeQpdfNative();
 
         assertThrows(QpdfUsageException.class, () -> Jqpdf.createJob(fake).json(3));
+        // qpdf 12 rejects --json-output versions other than 2 at run time;
+        // the builder mirrors that contract before reaching the native layer.
+        assertThrows(QpdfUsageException.class, () -> Jqpdf.createJob(fake).jsonOutput(1));
         assertEquals(0, fake.runCount());
     }
 
@@ -105,5 +109,96 @@ class JsonOptionsTest {
         assertEquals(0, result.exitCode(),
                 "applying the file's own trailer JSON must succeed; error: " + result.errorText());
         assertTrue(Files.size(updated) > 0);
+    }
+
+    @Test
+    void jsonVersion1EmitsTheLegacyKeys(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        String legacy = jsonText(temp, input, "legacy.json", j -> j.json(1));
+        String current = jsonText(temp, input, "current.json", QpdfJob::json);
+
+        assertTrue(legacy.contains("objectinfo") && legacy.contains("objects"),
+                "version 1 uses the legacy objects/objectinfo keys");
+        assertFalse(legacy.contains("\"qpdf\": ["), "version 1 has no qpdf key");
+        assertTrue(current.contains("\"qpdf\": [") && current.contains("jsonversion"),
+                "the default version emits the qpdf key");
+    }
+
+    @Test
+    void jsonKeySelectsTheTopLevelKeys(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        String full = jsonText(temp, input, "full.json", QpdfJob::json);
+        String selected = jsonText(temp, input, "selected.json", j -> j.json().jsonKey("pages"));
+
+        assertTrue(full.contains("acroform") && full.contains("\"pages\""),
+                "the full output carries all summary keys");
+        assertTrue(selected.contains("\"pages\""), "the selected key is present");
+        assertFalse(selected.contains("acroform"), "unselected summary keys are omitted");
+    }
+
+    @Test
+    void jsonObjectRestrictsTheObjectsDictionary(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        String restricted = jsonText(temp, input, "restricted.json",
+                j -> j.json().jsonObject("15,0"));
+
+        assertTrue(restricted.contains("\"obj:15 0 R\""),
+                "the requested stream object is present");
+        assertFalse(restricted.contains("\"obj:4 0 R\""),
+                "other objects are omitted from the objects dictionary");
+    }
+
+    @Test
+    void jsonStreamDataInlineEmbedsBase64Data(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+
+        String plain = jsonText(temp, input, "plain.json", QpdfJob::json);
+        String inline = jsonText(temp, input, "inline.json",
+                j -> j.json().jsonStreamData(JsonStreamData.INLINE));
+
+        assertFalse(plain.contains("\"data\":"), "stream data is omitted by default");
+        assertTrue(inline.contains("\"data\": \""),
+                "inline mode embeds base64 stream data, got: " + inline.substring(0, 120));
+    }
+
+    @Test
+    void jsonStreamDataFileWritesSideFilesWithThePrefix(@TempDir Path temp) throws Exception {
+        assumeTrue(nativeAvailable(), "native stack not available");
+        Path input = assumePdf("11-pages.pdf");
+        Path jsonFile = temp.resolve("doc.json");
+        Path prefix = temp.resolve("stream");
+
+        Jqpdf.createJob()
+                .input(input.toString()).output(jsonFile.toString())
+                .json()
+                .jsonStreamData(JsonStreamData.FILE)
+                .jsonStreamPrefix(prefix.toString())
+                .run()
+                .orThrow();
+
+        int sideFiles;
+        try (var files = Files.list(temp)) {
+            sideFiles = (int) files.filter(f -> f.getFileName().toString().startsWith("stream-"))
+                    .count();
+        }
+        assertTrue(sideFiles >= 11,
+                "one side file per content stream at least, got " + sideFiles);
+        assertTrue(Files.size(jsonFile) > 0, "the JSON document itself is written");
+    }
+
+    private String jsonText(Path temp, Path input, String name,
+            java.util.function.Consumer<QpdfJob> options) throws java.io.IOException {
+        Path jsonFile = temp.resolve(name);
+        QpdfJob job = Jqpdf.createJob().input(input.toString()).output(jsonFile.toString());
+        options.accept(job);
+        job.run().orThrow();
+        return Files.readString(jsonFile, StandardCharsets.UTF_8);
     }
 }

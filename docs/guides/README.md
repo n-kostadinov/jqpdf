@@ -18,4 +18,6 @@ with the jqpdf specification in [`docs/qpdf-spec.md`](../qpdf-spec.md)).
 | [info-options.md](info-options.md) | Version/copyright and why help options are CLI-only |
 
 Start with the [README](../../README.md) for building, loading, and
-concurrency notes.
+concurrency notes. The complete feature-by-feature audit of qpdf CLI
+coverage — Java API method, argv test, and real-PDF test for every
+option — lives in [docs/coverage.md](../coverage.md).
