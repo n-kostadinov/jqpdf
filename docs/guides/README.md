@@ -3,6 +3,28 @@
 User documentation per functional area of the qpdf CLI (cross-referenced
 with the jqpdf specification in [`docs/qpdf-spec.md`](../qpdf-spec.md)).
 
+## Supported platforms
+
+The jar bundles prebuilt qpdf binaries plus a JNI shim per platform and
+extracts them to a temp directory at runtime — no system qpdf
+installation is needed. Platform binaries are **not** committed; CI
+fetches the pinned qpdf release and compiles the shims
+(`scripts/fetch-qpdf-binaries`, `scripts/build-native-shim`).
+
+| Platform | Shipped | Built and tested |
+|---|---|---|
+| `linux-x86_64` | yes | compiled and test suite executed on an Ubuntu runner |
+| `windows-x86_64` | yes | cross-compiled with mingw; test suite executed on a Windows runner |
+| `macos-aarch64` | yes | compiled and test suite executed on an arm64 macOS runner |
+| `macos-x86_64` | yes | cross-compiled (`-arch x86_64`) and statically validated (link + `lipo`); **not execution-tested** — Intel macOS runners no longer exist |
+| `linux-aarch64` | no | qpdf binaries are fetchable but no JNI shim build exists yet |
+| `windows-x86` | no | same — 32-bit Windows unsupported until a shim build is added |
+| `windows-aarch64` | no | same — ARM Windows unsupported until a shim build is added |
+
+Unsupported platform directories are pruned from release jars by
+`scripts/release-native-bundle`, which also fails the build if any
+shipped platform is missing its shim.
+
 | Guide | Area |
 |---|---|
 | [general-options.md](general-options.md) | Basic invocation, passwords, warnings, determinism |
