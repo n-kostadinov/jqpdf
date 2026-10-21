@@ -141,11 +141,14 @@ build_macos() {
     jdk_inc=$(jdk_include darwin) || return 0
     mkdir -p "$out/macos-$arch"
     info "compiling macos-$arch/libjqpdfjni.dylib"
+    # Platform dirs say aarch64; Apple clang's -arch flag says arm64.
+    local clang_arch=$arch
+    [ "$arch" = aarch64 ] && clang_arch=arm64
     # -arch makes the arm64 runner cross-compile the x86_64 shim (Intel
     # runners no longer exist); the dylib is linked by path because
     # Darwin's linker lacks GNU ld's -l:name syntax. rpath @loader_path
     # resolves libqpdf.30.dylib next to the extracted shim at runtime.
-    clang -shared -O2 -std=c11 -arch "$arch" \
+    clang -shared -O2 -std=c11 -arch "$clang_arch" \
         -I"$jdk_inc" -I"$jdk_inc/darwin" -I"$staging/include" \
         "$src" \
         "$staging/macos-$arch/libqpdf.30.dylib" \
