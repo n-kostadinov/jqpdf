@@ -16,6 +16,7 @@ with the jqpdf specification in [`docs/qpdf-spec.md`](../qpdf-spec.md)).
 | [json.md](json.md) | qpdf JSON output and input |
 | [global-limits.md](global-limits.md) | Parser limits, testing options |
 | [info-options.md](info-options.md) | Version/copyright and why help options are CLI-only |
+| [memory-io.md](memory-io.md) | byte[]/stream/string inputs and outputs, spill files, temp directory |
 
 Start with the [README](../../README.md) for building, loading, and
 concurrency notes. The complete feature-by-feature audit of qpdf CLI

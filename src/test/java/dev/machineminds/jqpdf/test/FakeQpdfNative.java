@@ -3,6 +3,7 @@ package dev.machineminds.jqpdf.test;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import dev.machineminds.jqpdf.QpdfNative;
 
@@ -12,6 +13,13 @@ import dev.machineminds.jqpdf.QpdfNative;
  * captured output. No native library involved.
  */
 public final class FakeQpdfNative implements QpdfNative {
+
+    /**
+     * Optional observer invoked with each run's full decoded argv (program
+     * name first) at initialize time — the point where spill files still
+     * exist, so tests can inspect them.
+     */
+    public Consumer<List<String>> onInitialize;
 
     private final List<List<String>> argvRuns = new ArrayList<>();
     private final List<String> jsonRuns = new ArrayList<>();
@@ -53,7 +61,11 @@ public final class FakeQpdfNative implements QpdfNative {
 
     @Override
     public int jobInitializeFromArgv(long job, byte[] argvUtf8, int argc) {
-        argvRuns.add(dev.machineminds.jqpdf.internal.ArgvCodec.decode(argvUtf8));
+        List<String> argv = dev.machineminds.jqpdf.internal.ArgvCodec.decode(argvUtf8);
+        argvRuns.add(argv);
+        if (onInitialize != null) {
+            onInitialize.accept(argv);
+        }
         return initializeExitCode;
     }
 

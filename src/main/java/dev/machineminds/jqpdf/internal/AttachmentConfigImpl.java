@@ -11,14 +11,29 @@ import dev.machineminds.jqpdf.options.AttachmentOptions.CopyAttachmentsConfig;
 public final class AttachmentConfigImpl implements AttachmentConfig {
 
     private String file;
+    private byte[] content;
     private final List<String> subOptions = new ArrayList<>();
 
-    public List<String> argvTokens() {
-        if (file == null) {
-            throw new QpdfUsageException("addAttachment(...) requires file(...)");
+    /**
+     * The group's argv tokens: the file path, or a {@link PendingSpill}
+     * marker when the payload came from {@code content(...)}, followed by
+     * the sub-options in call order.
+     */
+    public List<Object> argvTokens() {
+        if (file == null && content == null) {
+            throw new QpdfUsageException("addAttachment(...) requires file(...) or content(...)");
         }
-        List<String> tokens = new ArrayList<>();
-        tokens.add(file);
+        if (file != null && content != null) {
+            throw new QpdfUsageException(
+                    "addAttachment(...) accepts only one of file(...) or content(...)");
+        }
+        if (content != null && subOptions.stream().noneMatch(t -> t.startsWith("--key="))) {
+            throw new QpdfUsageException(
+                    "addAttachment(...) with content(...) requires key(...): no file basename"
+                            + " exists to default it from");
+        }
+        List<Object> tokens = new ArrayList<>();
+        tokens.add(file != null ? file : new PendingSpill(content, "", ".bin"));
         tokens.addAll(subOptions);
         return tokens;
     }
@@ -26,6 +41,15 @@ public final class AttachmentConfigImpl implements AttachmentConfig {
     @Override
     public AttachmentConfig file(String file) {
         this.file = require(file, "attachment file");
+        return this;
+    }
+
+    @Override
+    public AttachmentConfig content(byte[] content) {
+        if (content == null) {
+            throw new QpdfUsageException("attachment content must not be null");
+        }
+        this.content = content;
         return this;
     }
 

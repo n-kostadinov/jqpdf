@@ -120,15 +120,20 @@ method returns the job for chaining. Guides with examples:
 | JSON (§5.13, §6) | `JsonOptions` | [json.md](docs/guides/json.md) |
 | Global limits, testing (§5.14, §5.15) | `GlobalOptions` | [global-limits.md](docs/guides/global-limits.md) |
 | CLI info options (§5.4) | — (static methods on `Jqpdf`) | [info-options.md](docs/guides/info-options.md) |
+| In-memory I/O (§9.1) | `QpdfJob` input/output overloads, `JobResult` | [memory-io.md](docs/guides/memory-io.md) |
 
 ### Results and output capture
 
 [`JobResult`](src/main/java/dev/machineminds/jqpdf/JobResult.java) exposes
 `exitCode()`, `success()`, `hasWarnings()`, `infoText()` (qpdf's stdout),
-`warnText()`, `errorText()`, and `savedData()` (binary output of
-`showAttachment`/`rawStreamData`/`filteredStreamData`). Output is captured
+`warnText()`, `errorText()`, `savedData()` (binary output of
+`showAttachment`/`rawStreamData`/`filteredStreamData`), and `savedText()`
+(its UTF-8 form, e.g. JSON output). Output is captured
 per job in native buffers — the library never writes to the host process's
-console.
+console. See [in-memory I/O](docs/guides/memory-io.md) for
+`input(byte[]`/`InputStream`/`Path)`, `outputMemory()`, and configuring
+the spill directory (`JQPDF_TMPDIR`) — including the Kubernetes
+memory-backed volume recipe.
 
 ### QPDFJob JSON passthrough
 

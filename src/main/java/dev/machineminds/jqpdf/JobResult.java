@@ -86,6 +86,15 @@ public final class JobResult {
         return savedData;
     }
 
+    /**
+     * The saved pipeline's output decoded as UTF-8 — the string form of JSON
+     * output written with {@code json()} and no output file (spec §9.1);
+     * empty when unused.
+     */
+    public String savedText() {
+        return savedData == null ? "" : new String(savedData, StandardCharsets.UTF_8);
+    }
+
     @Override
     public String toString() {
         return "JobResult[exitCode=" + exitCode + "]";

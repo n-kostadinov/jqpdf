@@ -1,6 +1,8 @@
 package dev.machineminds.jqpdf.internal;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +36,16 @@ public final class QpdfJobImpl implements QpdfJob {
 
     private String input;
     private boolean emptyInput;
+    /** In-memory main input, spilled at run time; {@code null} when a path or stream is set. */
+    private byte[] pendingInputContent;
+    private String pendingInputSuffix;
+    private InputStream pendingInputStream;
     private String output;
+    private boolean outputToMemory;
     private boolean replaceInput;
-    private final List<String> options = new ArrayList<>();
+    /** Option tokens: literal argv strings or {@link PendingSpill} markers resolved at run time. */
+    private final List<Object> options = new ArrayList<>();
+    private Path tempDir;
 
     /** Limits customized by any job in this process; see {@link #appendGlobalLimits}. */
     private static final java.util.Set<String> CUSTOMIZED_IN_PROCESS =
@@ -49,22 +58,77 @@ public final class QpdfJobImpl implements QpdfJob {
     }
 
     @Override
-    public QpdfJob input(String file) {
-        this.input = requireText(file, "input file");
-        this.emptyInput = false;
-        return this;
-    }
-
-    @Override
     public QpdfJob emptyInput() {
         this.emptyInput = true;
         return this;
     }
 
     @Override
+    public QpdfJob input(String file) {
+        this.input = requireText(file, "input file");
+        this.emptyInput = false;
+        this.pendingInputContent = null;
+        this.pendingInputSuffix = null;
+        this.pendingInputStream = null;
+        return this;
+    }
+
+    @Override
+    public QpdfJob input(byte[] pdf) {
+        if (pdf == null) {
+            throw new QpdfUsageException("input PDF must not be null");
+        }
+        this.pendingInputContent = pdf;
+        this.pendingInputSuffix = ".pdf";
+        this.pendingInputStream = null;
+        this.input = null;
+        this.emptyInput = false;
+        return this;
+    }
+
+    @Override
+    public QpdfJob input(InputStream pdf) {
+        if (pdf == null) {
+            throw new QpdfUsageException("input PDF stream must not be null");
+        }
+        this.pendingInputStream = pdf;
+        this.pendingInputContent = null;
+        this.pendingInputSuffix = null;
+        this.input = null;
+        this.emptyInput = false;
+        return this;
+    }
+
+    @Override
+    public QpdfJob input(Path file) {
+        if (file == null) {
+            throw new QpdfUsageException("input file must not be null");
+        }
+        return input(file.toString());
+    }
+
+    @Override
     public QpdfJob output(String file) {
         this.output = requireText(file, "output file");
         this.replaceInput = false;
+        this.outputToMemory = false;
+        return this;
+    }
+
+    @Override
+    public QpdfJob outputMemory() {
+        this.outputToMemory = true;
+        this.output = null;
+        this.replaceInput = false;
+        return this;
+    }
+
+    @Override
+    public QpdfJob tempDir(Path dir) {
+        if (dir == null) {
+            throw new QpdfUsageException("temp directory must not be null");
+        }
+        this.tempDir = dir;
         return this;
     }
 
@@ -72,6 +136,7 @@ public final class QpdfJobImpl implements QpdfJob {
     public QpdfJob replaceInput() {
         this.replaceInput = true;
         this.output = null;
+        this.outputToMemory = false;
         return this;
     }
 
@@ -639,8 +704,41 @@ public final class QpdfJobImpl implements QpdfJob {
     }
 
     @Override
+    public QpdfJob jsonInputContent(String json) {
+        return jsonInputContent(requireText(json, "json input").getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public QpdfJob jsonInputContent(byte[] json) {
+        if (json == null) {
+            throw new QpdfUsageException("json input must not be null");
+        }
+        options.add("--json-input");
+        this.pendingInputContent = json;
+        this.pendingInputSuffix = ".json";
+        this.pendingInputStream = null;
+        this.input = null;
+        this.emptyInput = false;
+        return this;
+    }
+
+    @Override
     public QpdfJob updateFromJson(String file) {
         options.add("--update-from-json=" + requireText(file, "qpdf JSON file"));
+        return this;
+    }
+
+    @Override
+    public QpdfJob updateFromJsonContent(String json) {
+        return updateFromJsonContent(requireText(json, "qpdf JSON").getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public QpdfJob updateFromJsonContent(byte[] json) {
+        if (json == null) {
+            throw new QpdfUsageException("qpdf JSON must not be null");
+        }
+        options.add(new PendingSpill(json, "--update-from-json=", ".json"));
         return this;
     }
 
@@ -792,16 +890,26 @@ public final class QpdfJobImpl implements QpdfJob {
 
     @Override
     public synchronized JobResult run() {
-        if (input == null && !emptyInput) {
+        boolean spilledMainInput = pendingInputContent != null || pendingInputStream != null;
+        if (input == null && !emptyInput && !spilledMainInput) {
             throw new QpdfUsageException("no input file configured; use input(...) or emptyInput()");
         }
-        List<String> argv = synthesizeArgv();
-        long job = qpdf.jobCreate();
+        if (replaceInput && spilledMainInput) {
+            throw new QpdfUsageException(
+                    "replaceInput() cannot be combined with input(byte[]) or input(InputStream)");
+        }
+        SpillFiles spills = SpillFiles.forJob(tempDir);
         try {
-            int init = qpdf.jobInitializeFromArgv(job, ArgvCodec.encode(argv), argv.size());
-            return JobResult.capture(qpdf, job, init == 0 ? qpdf.jobRun(job) : init);
+            List<String> argv = synthesizeArgv(spills);
+            long job = qpdf.jobCreate();
+            try {
+                int init = qpdf.jobInitializeFromArgv(job, ArgvCodec.encode(argv), argv.size());
+                return JobResult.capture(qpdf, job, init == 0 ? qpdf.jobRun(job) : init);
+            } finally {
+                qpdf.jobDestroy(job);
+            }
         } finally {
-            qpdf.jobDestroy(job);
+            spills.cleanup();
         }
     }
 
@@ -820,20 +928,42 @@ public final class QpdfJobImpl implements QpdfJob {
     /**
      * The argv handed to the native library: program name, input file,
      * options in call order, output file last — a valid CLI ordering for
-     * every combination (spec §2).
+     * every combination (spec §2). In-memory inputs and content options are
+     * spilled here, inside the run's {@link SpillFiles} lifecycle.
      */
-    private List<String> synthesizeArgv() {
+    private List<String> synthesizeArgv(SpillFiles spills) {
         List<String> argv = new ArrayList<>();
         argv.add("qpdf");
-        argv.add(emptyInput ? "--empty" : input);
-        argv.addAll(options);
+        argv.add(emptyInput ? "--empty" : resolveInputFile(spills));
+        for (Object token : options) {
+            if (token instanceof PendingSpill) {
+                argv.add(((PendingSpill) token).render(spills));
+            } else {
+                argv.add((String) token);
+            }
+        }
         appendGlobalLimits(argv);
         if (replaceInput) {
             argv.add("--replace-input");
         } else if (output != null) {
             argv.add(output);
+        } else if (outputToMemory) {
+            argv.add("-");
         }
         return argv;
+    }
+
+    private String resolveInputFile(SpillFiles spills) {
+        if (input != null) {
+            return input;
+        }
+        if (pendingInputContent != null) {
+            return spills.spill(pendingInputContent, pendingInputSuffix).toString();
+        }
+        if (pendingInputStream != null) {
+            return spills.spill(pendingInputStream, ".pdf").toString();
+        }
+        throw new QpdfUsageException("no input file configured; use input(...) or emptyInput()");
     }
 
     private static String requireText(String value, String what) {

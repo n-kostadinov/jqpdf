@@ -964,6 +964,53 @@ compress/decompress for testing — is likewise a standalone tool, out of scope.
   `pl_alpha_lower`, `pl_alpha_upper`, `pl_roman_lower`, `pl_roman_upper` — matching the
   §10.7 label types, usable as the JNI enum for `--set-page-labels`.)
 
+### 9.1 In-memory I/O (spill files)
+
+qpdf's job layer requires a seekable infile: the CLI has no stdin input
+("the input file has to be seekable") and neither `qpdfjob-c.h` nor the
+public `QPDFJob` C++ API accepts a memory input source. The Java API
+therefore materializes in-memory inputs as temporary files ("spill files")
+for the duration of one `run()`:
+
+| Java API | Behavior |
+|---|---|
+| `input(byte[])` / `input(InputStream)` | Spilled as `jqpdf-*.pdf`; the stream is copied without full buffering and consumed by that run |
+| `input(Path)` | Passed through as the infile unchanged (no copy; `replaceInput()` stays legal) |
+| `jsonInputContent(String/byte[])` | Spills the qpdf JSON document as `jqpdf-*.json` and adds `--json-input`; it **is** the main input |
+| `updateFromJsonContent(String/byte[])` | Spills as `jqpdf-*.json` and emits `--update-from-json=<spilled>` |
+| `AttachmentConfig.content(byte[])` | Spills the payload as `jqpdf-*.bin` as the group's file token; requires `key(...)` (no basename to default from) and excludes `file(...)` |
+| `outputMemory()` | Emits outfile `-`; the result's bytes arrive in `JobResult.savedData()`, UTF-8 text in `savedText()` |
+
+Lifecycle and guarantees:
+
+- Spill files are created when the run's argv is synthesized and deleted in
+  a `finally` after the native job is destroyed. Cleanup is best-effort: a
+  crash can leave files behind, but a normal, warning, or error run cannot.
+- Files are created exclusively via `Files.createTempFile` (prefix
+  `jqpdf-`, per-kind suffix), whose create-new semantics make names unique:
+  concurrent jobs — and separate processes sharing the same directory —
+  never collide, and each run deletes only the files it created.
+- `replaceInput()` combined with a spilled main input (`input(byte[])`,
+  `input(InputStream)`, or `jsonInputContent(...)`) throws
+  `QpdfUsageException` at `run()` time.
+- qpdf restrictions that surface as native usage errors (exit 2), not Java
+  pre-validation: `--split-pages` may not write to standard output, and
+  `--json-stream-data=file` to standard output requires
+  `--json-stream-prefix` (§5.13).
+
+Spill-directory resolution (evaluated when a file is spilled):
+
+1. the job's `tempDir(Path)` override;
+2. the `jqpdf.tmpdir` system property;
+3. the `JQPDF_TMPDIR` environment variable;
+4. `java.io.tmpdir` (JVM default).
+
+A configured directory from steps 1–3 that is missing, not a directory, or
+not writable fails fast with `IllegalStateException` naming the knob — no
+silent fallback. The configured directory only affects spill files; the
+bundled native libraries are still extracted per `NativeLibrary`'s own
+rules.
+
 ## 10. Cross-cutting grammars and behaviors
 
 ### 10.1 Page range grammar

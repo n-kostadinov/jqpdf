@@ -22,6 +22,14 @@ public interface AttachmentOptions {
 
         AttachmentConfig file(String file);
 
+        /**
+         * An in-memory attachment payload, spilled to a temporary file for
+         * the duration of the next {@code run()}. Requires {@link #key(String)}
+         * (no file basename exists to default it from) and excludes
+         * {@link #file(String)} (spec §9.1).
+         */
+        AttachmentConfig content(byte[] content);
+
         /** Key in the embedded-files name tree; default: basename of the file. */
         AttachmentConfig key(String key);
 

@@ -45,6 +45,27 @@ public interface JsonOptions {
     /** {@code --json-input}: treat the input file as qpdf JSON. */
     QpdfJob jsonInput();
 
+    /**
+     * {@code --json-input} with the document supplied in memory: the JSON
+     * text is spilled to a temporary file that serves as the input for the
+     * next {@code run()} (spec §9.1). May not be combined with
+     * {@code replaceInput()}.
+     */
+    QpdfJob jsonInputContent(String json);
+
+    /** Byte form of {@link #jsonInputContent(String)}. */
+    QpdfJob jsonInputContent(byte[] json);
+
     /** {@code --update-from-json=file}: update the input PDF's objects from qpdf JSON. */
     QpdfJob updateFromJson(String file);
+
+    /**
+     * {@code --update-from-json} with the document supplied in memory,
+     * spilled to a temporary file for the duration of the next
+     * {@code run()} (spec §9.1).
+     */
+    QpdfJob updateFromJsonContent(String json);
+
+    /** Byte form of {@link #updateFromJsonContent(String)}. */
+    QpdfJob updateFromJsonContent(byte[] json);
 }
