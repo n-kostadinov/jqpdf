@@ -15,8 +15,8 @@ fetches the pinned qpdf release and compiles the shims
 |---|---|---|
 | `linux-x86_64` | yes | compiled and test suite executed on an Ubuntu runner |
 | `windows-x86_64` | yes | cross-compiled with mingw; test suite executed on a Windows runner |
-| `macos-aarch64` | yes | compiled and test suite executed on an arm64 macOS runner |
-| `macos-x86_64` | yes | cross-compiled (`-arch x86_64`) and statically validated (link + `lipo`); **not execution-tested** — Intel macOS runners no longer exist |
+| `macos-aarch64` | yes | compiled and test suite executed on an arm64 macOS runner — **encryption unsupported**: the official qpdf macOS binaries cannot load the OpenSSL legacy provider, so encrypting/decrypting PDFs fails with `qpdf: unable to load openssl legacy provider` until qpdf's release builds change |
+| `macos-x86_64` | yes | cross-compiled (`-arch x86_64`) and statically validated (link + `lipo`); **not execution-tested** — Intel macOS runners no longer exist; same encryption limitation as `macos-aarch64` (same qpdf binaries) |
 | `linux-aarch64` | no | qpdf binaries are fetchable but no JNI shim build exists yet |
 | `windows-x86` | no | same — 32-bit Windows unsupported until a shim build is added |
 | `windows-aarch64` | no | same — ARM Windows unsupported until a shim build is added |

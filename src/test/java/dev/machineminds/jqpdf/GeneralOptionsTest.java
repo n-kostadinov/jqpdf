@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -97,6 +98,7 @@ class GeneralOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void passwordOpensEncryptedFixture(@TempDir Path temp) {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("20-pages.pdf");
@@ -112,6 +114,7 @@ class GeneralOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void passwordFileOpensEncryptedFixture(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("20-pages.pdf");

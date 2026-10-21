@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -208,6 +209,7 @@ class GlobalOptionsTest {
     }
 
     @Test
+    @Tag("native-crypto")
     void staticAesIvYieldsByteIdenticalEncryptedOutput(@TempDir Path temp) throws Exception {
         assumeTrue(nativeAvailable(), "native stack not available");
         Path input = assumePdf("11-pages.pdf");
