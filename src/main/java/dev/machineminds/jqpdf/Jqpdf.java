@@ -10,18 +10,25 @@ import java.util.Properties;
 
 /**
  * Entry point of the jqpdf library: version constants and the job factory.
+ * See {@link QpdfJob} for the job model; the package documentation gives an
+ * orientation with links to the guides and the CLI specification.
  */
 public final class Jqpdf {
 
-    /** Version of the jqpdf library, kept in sync with the Maven version. */
-    public static final String VERSION = "0.1.0-SNAPSHOT";
+    /**
+     * Version of the jqpdf library. Injected from the Maven
+     * {@code project.version} via the same filtered resource as
+     * {@link #QPDF_VERSION}, so the constant always matches the jar it
+     * ships in.
+     */
+    public static final String VERSION = loadVersionProperty("jqpdf.version");
 
     /**
      * Version of the bundled native qpdf library. Injected from the Maven
      * property {@code qpdf.version} via a filtered resource so the jar, the
      * downloaded binaries, and the compiled JNI shim always agree.
      */
-    public static final String QPDF_VERSION = loadQpdfVersion();
+    public static final String QPDF_VERSION = loadVersionProperty("qpdf.version");
 
     /**
      * Creates a job backed by the bundled native qpdf binaries. The native
@@ -64,7 +71,7 @@ public final class Jqpdf {
         }
     }
 
-    private static String loadQpdfVersion() {
+    private static String loadVersionProperty(String key) {
         Properties properties = new Properties();
         try (InputStream in = Jqpdf.class
                 .getResourceAsStream("/dev/machineminds/jqpdf/version.properties")) {
@@ -75,7 +82,7 @@ public final class Jqpdf {
         } catch (IOException e) {
             return "unknown";
         }
-        return properties.getProperty("qpdf.version", "unknown");
+        return properties.getProperty(key, "unknown");
     }
 
     private Jqpdf() {

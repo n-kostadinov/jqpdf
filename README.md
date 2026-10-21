@@ -7,13 +7,14 @@ library providing JNI bindings around it. It ships the native qpdf
 libraries for the supported platforms inside a single self-contained jar —
 no native setup, no runtime dependencies.
 
-Status: early development (0.1.0-SNAPSHOT). The core job API and all
-functional areas of the qpdf CLI are implemented and tested; see
-[API reference](#api-reference) below.
+Status: the core job API and all functional areas of the qpdf CLI are
+implemented and tested; see [API reference](#api-reference) below.
 
 ## Coordinates
 
-`dev.machineminds:jqpdf:0.1.0-SNAPSHOT` — not published to any repository yet.
+`dev.machineminds:jqpdf` — releases are published to
+[Maven Central](https://central.sonatype.com/artifact/dev.machineminds/jqpdf)
+and attached to the [GitHub releases](https://github.com/n-kostadinov/jqpdf/releases).
 
 ## Run/use requirements
 
