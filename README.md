@@ -1,4 +1,9 @@
-# jqpdf
+# jqpdf — Java bindings for qpdf
+
+[![Maven Central](https://img.shields.io/maven-central/v/dev.machineminds/jqpdf.svg)](https://central.sonatype.com/artifact/dev.machineminds/jqpdf)
+[![CI](https://github.com/n-kostadinov/jqpdf/actions/workflows/ci.yml/badge.svg)](https://github.com/n-kostadinov/jqpdf/actions/workflows/ci.yml)
+[![Javadoc](https://img.shields.io/badge/javadoc-reference-blue.svg)](https://javadoc.io/doc/dev.machineminds/jqpdf)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 All the kudos for what this library can do belong to the authors of
 [qpdf](https://github.com/qpdf/qpdf), the C++ toolkit for inspecting and
@@ -9,6 +14,20 @@ no native setup, no runtime dependencies.
 
 Status: the core job API and all functional areas of the qpdf CLI are
 implemented and tested; see [API reference](#api-reference) below.
+
+## What & why
+
+jqpdf lets a Java 11+ application merge, split, encrypt and decrypt,
+linearize (fast web view), and repair or inspect PDF files by driving the
+same battle-tested engine as the `qpdf` command line — in-process, with
+the native libraries bundled in the jar. Unlike general-purpose PDF
+libraries such as PDFBox or iText, qpdf is *content-preserving*: it
+transforms the PDF's structure without reinterpreting page content, which
+makes it a robust choice for repairing damaged files and for lossless
+split, merge, and re-save pipelines. If you currently shell out to the
+`qpdf` CLI from Java, jqpdf replaces the process spawn with a typed
+fluent API and captured results; if you use PDFBox only to shuffle pages
+around, jqpdf is a lighter dependency with no transitive jars at all.
 
 ## Coordinates
 

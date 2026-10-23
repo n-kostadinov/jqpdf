@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a new capability or coverage for a qpdf CLI option
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        jqpdf aims to expose the qpdf job API faithfully. If a qpdf CLI
+        option or workflow is missing, name it — references to the qpdf
+        manual (section number or option name) help a lot.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do that jqpdf does not support today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to see?
+      description: The desired API shape, or the qpdf CLI option it should map to (e.g. `--generate-appearances`).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: e.g. shelling out to the qpdf CLI, PDFBox/iText, another binding.
+    validations:
+      required: false

@@ -1,0 +1,64 @@
+name: Bug report
+description: Report behavior that differs from the documentation or from the qpdf CLI
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please include a
+        minimal reproduction — jqpdf wraps the qpdf job API, so a snippet
+        of Java plus a note on what the `qpdf` CLI does with the same
+        arguments (when applicable) is the fastest path to a fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A minimal snippet or CLI-equivalent command.
+      placeholder: |
+        Jqpdf.createJob()
+            .input("in.pdf")
+            .output("out.pdf")
+            .run().orThrow();
+    validations:
+      required: true
+  - type: input
+    id: jqpdf-version
+    attributes:
+      label: jqpdf version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: java-version
+    attributes:
+      label: Java version
+      description: Output of `java -version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x64
+        - Linux x86-64
+        - macOS ARM64
+        - macOS x86-64
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Captured output
+      description: JobResult text (infoText/warningText/errorText) or the stack trace, if available.
+      render: text
+    validations:
+      required: false
